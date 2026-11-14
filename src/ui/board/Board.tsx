@@ -1,0 +1,233 @@
+import { memo } from 'react';
+import type { Level } from '../../engine/types';
+import type { T } from '../../i18n';
+import type { ThemeId } from '../../progression/profile';
+
+export interface BoardProps {
+  level: Level;
+  path: number[];
+  size: number;
+  t: T;
+  theme: ThemeId;
+  onTap?: (stone: number) => void;
+  /** Currently legal targets (helper highlight). */
+  targets?: number[];
+  hintTarget?: number | null;
+  ruler?: { from: number; len: number; key: number } | null;
+  shake?: { stone: number; key: number } | null;
+  /** Index into path highlighted during the win replay. */
+  replay?: number;
+  showStartRing?: boolean;
+}
+
+const PAD = 0.12;
+const c = (v: number) => v + 0.5;
+
+function arc(ax: number, ay: number, bx: number, by: number, i: number, flat: boolean) {
+  const mx = (ax + bx) / 2;
+  const my = (ay + by) / 2;
+  const dx = bx - ax;
+  const dy = by - ay;
+  const dist = Math.hypot(dx, dy);
+  const bend = (flat ? 0.07 : 0.14 + 0.07 * dist) * (i % 2 ? 1 : -1);
+  const qx = mx + (-dy / dist) * bend;
+  const qy = my + (dx / dist) * bend;
+  return `M${ax} ${ay}Q${qx} ${qy} ${bx} ${by}`;
+}
+
+function lilyPad(cx: number, cy: number, r: number) {
+  const p = (deg: number) => [cx + r * Math.cos((deg * Math.PI) / 180), cy + r * Math.sin((deg * Math.PI) / 180)];
+  const [x1, y1] = p(-72);
+  const [x2, y2] = p(-108);
+  return `M${cx} ${cy}L${x1} ${y1}A${r} ${r} 0 1 1 ${x2} ${y2}Z`;
+}
+
+function StoneShape({ kind, x, y, theme, fill, stroke, sw }: {
+  kind: 'P' | 'R' | 'H'; x: number; y: number; theme: ThemeId; fill: string; stroke: string; sw: number;
+}) {
+  const cx = c(x);
+  const cy = c(y);
+  if (kind === 'P') {
+    if (theme === 'lily') return <path d={lilyPad(cx, cy, 0.33)} fill={fill} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />;
+    return <circle cx={cx} cy={cy} r={0.3} fill={fill} stroke={stroke} strokeWidth={sw} />;
+  }
+  if (kind === 'R') {
+    const r = 0.37;
+    return <polygon points={`${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}`} fill={fill} stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />;
+  }
+  const s = 0.54;
+  return <rect x={cx - s / 2} y={cy - s / 2} width={s} height={s} rx={0.09} fill={fill} stroke={stroke} strokeWidth={sw} />;
+}
+
+function Frog() {
+  return (
+    <g transform="translate(0.27 -0.3) scale(0.85)">
+      <ellipse cx={0} cy={0.02} rx={0.15} ry={0.11} fill="#3f9b3a" stroke="#1d4d1c" strokeWidth={0.025} />
+      <circle cx={-0.07} cy={-0.08} r={0.05} fill="#fff" stroke="#1d4d1c" strokeWidth={0.02} />
+      <circle cx={0.07} cy={-0.08} r={0.05} fill="#fff" stroke="#1d4d1c" strokeWidth={0.02} />
+      <circle cx={-0.07} cy={-0.08} r={0.02} fill="#111" />
+      <circle cx={0.07} cy={-0.08} r={0.02} fill="#111" />
+    </g>
+  );
+}
+
+function Boat() {
+  return (
+    <g transform="translate(0.27 -0.3) scale(0.85)">
+      <path d="M-0.17 0.02 L0.17 0.02 L0.11 0.1 L-0.11 0.1 Z" fill="#7a2e12" stroke="#3b1406" strokeWidth={0.02} />
+      <path d="M0 -0.18 L0 0.02 L0.13 0.02 Z" fill="#fff" stroke="#3b1406" strokeWidth={0.02} strokeLinejoin="round" />
+    </g>
+  );
+}
+
+function BoardImpl(p: BoardProps) {
+  const { level, path, size, t, theme } = p;
+  const W = level.w;
+  const H = level.h;
+  const visitedAt = new Map(path.map((s, i) => [s, i]));
+  const active = path.length ? path[path.length - 1] : null;
+  const targets = new Set(p.targets ?? []);
+  const flat = theme === 'stars';
+  const interactive = !!p.onTap;
+
+  const grid: JSX.Element[] = [];
+  for (let i = 0; i <= W; i++) grid.push(<line key={`v${i}`} x1={i} y1={0} x2={i} y2={H} />);
+  for (let j = 0; j <= H; j++) grid.push(<line key={`h${j}`} x1={0} y1={j} x2={W} y2={j} />);
+
+  let ruler: JSX.Element | null = null;
+  if (p.ruler) {
+    const [x, y] = level.stones[p.ruler.from];
+    const L = p.ruler.len;
+    ruler = (
+      <g key={p.ruler.key} className="ruler" stroke="var(--b-accent)" strokeWidth={0.05} strokeLinecap="round" opacity={0.75}>
+        {[[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => {
+          const ex = x + dx * L;
+          const ey = y + dy * L;
+          if (ex < 0 || ex >= W || ey < 0 || ey >= H) return null;
+          const ticks = [];
+          for (let k = 1; k <= L; k++) {
+            const tx = c(x + dx * k);
+            const ty = c(y + dy * k);
+            ticks.push(<line key={k} x1={tx - dy * 0.12} y1={ty - dx * 0.12} x2={tx + dy * 0.12} y2={ty + dx * 0.12} />);
+          }
+          return (
+            <g key={`${dx}${dy}`}>
+              <line x1={c(x)} y1={c(y)} x2={c(ex)} y2={c(ey)} strokeDasharray="0.12 0.1" />
+              {ticks}
+              <circle cx={c(ex)} cy={c(ey)} r={0.42} fill="none" strokeWidth={0.035} />
+            </g>
+          );
+        })}
+      </g>
+    );
+  }
+
+  const arcs = path.slice(1).map((s, k) => {
+    const a = level.stones[path[k]];
+    const b = level.stones[s];
+    const isNew = k === path.length - 2;
+    return (
+      <path
+        key={`${k}-${path[k]}-${s}`}
+        d={arc(c(a[0]), c(a[1]), c(b[0]), c(b[1]), k, flat)}
+        pathLength={1}
+        className={isNew ? 'draw' : undefined}
+        fill="none"
+        stroke="var(--b-path)"
+        strokeWidth={flat ? 0.045 : 0.075}
+        strokeLinecap="round"
+        opacity={theme === 'islands' ? 0.85 : 0.7}
+        strokeDasharray={theme === 'islands' ? '0.08 0.08' : undefined}
+      />
+    );
+  });
+
+  const replayStone = p.replay !== undefined && p.replay >= 0 ? path[p.replay] : null;
+
+  return (
+    <svg
+      className="board"
+      width={size}
+      height={size}
+      viewBox={`${-PAD} ${-PAD} ${W + 2 * PAD} ${H + 2 * PAD}`}
+      role="group"
+      aria-label={`${W}×${H}`}
+    >
+      <rect x={-PAD} y={-PAD} width={W + 2 * PAD} height={H + 2 * PAD} rx={0.28} fill="var(--b-bg)" />
+      {theme === 'stars' &&
+        [[0.4, 0.7], [2.2, 0.3], [4.6, 1.2], [5.3, 4.4], [1.1, 5.4], [3.3, 3.6], [0.6, 2.9]].map(([sx, sy], i) =>
+          sx < W && sy < H ? <circle key={i} cx={sx} cy={sy} r={0.025} fill="#fff" opacity={0.5} /> : null,
+        )}
+      <g stroke="var(--b-grid)" strokeWidth="var(--b-grid-w)">{grid}</g>
+      {ruler}
+      <g>{arcs}</g>
+      {level.stones.map(([x, y, kind], i) => {
+        const vi = visitedAt.get(i);
+        const visited = vi !== undefined;
+        const isActive = i === active;
+        const isTarget = targets.has(i);
+        const shake = p.shake && p.shake.stone === i;
+        const state = isActive ? t('a11y.active') : visited ? t('a11y.visited', { n: vi + 1 }) : t('a11y.unvisited');
+        const label = t('a11y.stone', { col: x + 1, row: y + 1, kind: t(`a11y.kind.${kind}`), state });
+        return (
+          <g
+            key={i}
+            className={`stone${shake ? ' shake' : ''}`}
+            data-k={shake ? p.shake!.key : undefined}
+            role={interactive ? 'button' : undefined}
+            tabIndex={interactive ? 0 : undefined}
+            aria-label={interactive ? label : undefined}
+            onPointerDown={interactive ? (e) => { e.preventDefault(); p.onTap!(i); } : undefined}
+            onKeyDown={interactive ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); p.onTap!(i); }
+            } : undefined}
+          >
+            <rect x={x} y={y} width={1} height={1} fill="transparent" />
+            <circle className="focus-ring" cx={c(x)} cy={c(y)} r={0.47} fill="none" stroke="none" />
+            {isTarget && !visited && <circle className="glow" cx={c(x)} cy={c(y)} r={0.44} fill="var(--b-accent)" opacity={0.2} />}
+            {p.showStartRing && i === level.start && (
+              <circle cx={c(x)} cy={c(y)} r={0.42} fill="none" stroke="var(--b-stroke)" strokeWidth={0.035} />
+            )}
+            <g className={replayStone === i ? 'pop' : undefined} key={replayStone === i ? `r${p.replay}` : 'n'}>
+              <StoneShape
+                kind={kind}
+                x={x}
+                y={y}
+                theme={theme}
+                fill={visited ? 'var(--b-visited)' : 'var(--b-fill)'}
+                stroke={visited ? 'var(--b-visited)' : 'var(--b-stroke)'}
+                sw={0.06}
+              />
+              {visited && (
+                <text
+                  x={c(x)}
+                  y={c(y) + 0.012}
+                  fontSize={0.3}
+                  fontWeight={800}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fill="var(--b-num)"
+                  style={{ pointerEvents: 'none' }}
+                >
+                  {vi + 1}
+                </text>
+              )}
+            </g>
+            {p.hintTarget === i && (
+              <circle cx={c(x)} cy={c(y)} r={0.46} fill="none" stroke="var(--b-accent)" strokeWidth={0.06} strokeDasharray="0.12 0.09" className="glow" />
+            )}
+          </g>
+        );
+      })}
+      {active !== null && (
+        <g className="token" style={{ transform: `translate(${c(level.stones[active][0])}px, ${c(level.stones[active][1])}px)`, pointerEvents: 'none' }}>
+          <circle className="breathe" r={0.45} fill="none" stroke="var(--b-accent)" strokeWidth={0.075} />
+          {theme === 'lily' && <Frog />}
+          {theme === 'islands' && <Boat />}
+        </g>
+      )}
+    </svg>
+  );
+}
+
+export const Board = memo(BoardImpl);

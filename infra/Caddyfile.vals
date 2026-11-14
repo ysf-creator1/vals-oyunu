@@ -1,0 +1,14 @@
+# Vals – statik bulmaca oyunu (sunucu tarafı yok; dosyalar /srv/vals içinde).
+# Geçici adres sslip.io: kayıt gerektirmez, IP'yi adrese gömer. Yeni bir DuckDNS adı alınınca
+# aynı bloğun başına eklenir:  vals.130-61-214-155.sslip.io, yeniad.duckdns.org {
+vals.130-61-214-155.sslip.io {
+	encode gzip
+	header -Server
+	root * /srv/vals
+	@nocache path / /index.html /sw.js /registerSW.js /manifest.webmanifest
+	header @nocache Cache-Control "no-cache"
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+	try_files {path} /index.html
+	file_server
+}
