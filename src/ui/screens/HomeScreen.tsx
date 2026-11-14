@@ -3,7 +3,9 @@ import { continueTarget } from '../../progression/adaptive';
 import { tierOf } from '../../progression/bands';
 import { titleOf } from '../../progression/daily';
 import { currentStreak, dateKey } from '../../progression/streak';
+import { useState } from 'react';
 import { useGame } from '../../store/game';
+import { GuideSheet, InfoButton } from '../components/Guide';
 import { useT } from '../hooks';
 
 function Logo() {
@@ -29,9 +31,12 @@ export function HomeScreen() {
   const c = continueTarget(profile);
   const num = (Number(c.band[1]) - 1) * 40 + c.index + 1;
   const nextLabel = `${t(`tier.${tierOf(c.band)}` as StringKey)} · ${num}`;
+  const [guide, setGuide] = useState(false);
 
   return (
     <div className="screen home">
+      <InfoButton onClick={() => setGuide(true)} />
+      {guide && <GuideSheet onClose={() => setGuide(false)} />}
       <div className="logo">
         <Logo />
         <h1>{t('app.name')}</h1>

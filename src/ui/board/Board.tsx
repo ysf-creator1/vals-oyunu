@@ -18,6 +18,10 @@ export interface BoardProps {
   /** Index into path highlighted during the win replay. */
   replay?: number;
   showStartRing?: boolean;
+  /** Animated tapping finger on this stone (tutorial, help, guide). */
+  finger?: number | null;
+  /** Numbered step markers along a straight jump: shows why the target is the right distance. */
+  count?: { from: number; to: number } | null;
 }
 
 const PAD = 0.12;
@@ -76,6 +80,50 @@ function Boat() {
     <g transform="translate(0.27 -0.3) scale(0.85)">
       <path d="M-0.17 0.02 L0.17 0.02 L0.11 0.1 L-0.11 0.1 Z" fill="#7a2e12" stroke="#3b1406" strokeWidth={0.02} />
       <path d="M0 -0.18 L0 0.02 L0.13 0.02 Z" fill="#fff" stroke="#3b1406" strokeWidth={0.02} strokeLinejoin="round" />
+    </g>
+  );
+}
+
+/** A pointing hand whose fingertip is at (0,0). Drawn in board units (1 = one cell). */
+function Hand() {
+  return (
+    <g className="hand">
+      <g transform="rotate(-18)" fill="#ffffff" stroke="#1d1b26" strokeWidth={0.035} strokeLinejoin="round">
+        <rect x={0.07} y={0.36} width={0.19} height={0.36} rx={0.095} />
+        <rect x={0.22} y={0.42} width={0.18} height={0.33} rx={0.09} />
+        <ellipse cx={-0.15} cy={0.7} rx={0.085} ry={0.18} transform="rotate(-28 -0.15 0.7)" />
+        <path d="M-0.11 0.5 L0.4 0.55 L0.42 0.86 Q0.42 1.06 0.2 1.06 L0.02 1.06 Q-0.15 1.06 -0.15 0.86 Z" />
+        <rect x={-0.11} y={0} width={0.22} height={0.66} rx={0.11} />
+      </g>
+    </g>
+  );
+}
+
+function StepCount({ level, from, to }: { level: Level; from: number; to: number }) {
+  const [x, y] = level.stones[from];
+  const [tx, ty] = level.stones[to];
+  const dx = Math.sign(tx - x);
+  const dy = Math.sign(ty - y);
+  const L = Math.abs(tx - x) + Math.abs(ty - y);
+  // numbers sit beside the line (not on the stones): above / left of it, away from the finger (which hangs down-right)
+  const side = -1;
+  const ox = dy !== 0 ? side * 0.4 : 0;
+  const oy = dx !== 0 ? side * 0.4 : 0;
+  const marks = [];
+  for (let k = 1; k <= L; k++) {
+    const mx = c(x + dx * k) + ox;
+    const my = c(y + dy * k) + oy;
+    marks.push(
+      <g key={k} className="count-mark" style={{ animationDelay: `${(k - 1) * 0.18}s` }}>
+        <circle cx={mx} cy={my} r={0.15} fill="var(--b-accent)" />
+        <text x={mx} y={my + 0.008} fontSize={0.19} fontWeight={800} textAnchor="middle" dominantBaseline="central" fill="var(--b-num)">{k}</text>
+      </g>,
+    );
+  }
+  return (
+    <g style={{ pointerEvents: 'none' }}>
+      <line x1={c(x) + ox} y1={c(y) + oy} x2={c(tx) + ox} y2={c(ty) + oy} stroke="var(--b-accent)" strokeWidth={0.035} strokeDasharray="0.08 0.08" opacity={0.6} />
+      {marks}
     </g>
   );
 }
@@ -219,11 +267,18 @@ function BoardImpl(p: BoardProps) {
           </g>
         );
       })}
+      {p.count && <StepCount key={`c${p.count.from}-${p.count.to}`} level={level} from={p.count.from} to={p.count.to} />}
       {active !== null && (
         <g className="token" style={{ transform: `translate(${c(level.stones[active][0])}px, ${c(level.stones[active][1])}px)`, pointerEvents: 'none' }}>
           <circle className="breathe" r={0.45} fill="none" stroke="var(--b-accent)" strokeWidth={0.075} />
           {theme === 'lily' && <Frog />}
           {theme === 'islands' && <Boat />}
+        </g>
+      )}
+      {p.finger != null && level.stones[p.finger] && (
+        <g key={`f${p.finger}`} className="finger" transform={`translate(${c(level.stones[p.finger][0])} ${c(level.stones[p.finger][1])})`} style={{ pointerEvents: 'none' }}>
+          <circle className="tap-ring" r={0.34} fill="none" stroke="var(--b-accent)" strokeWidth={0.06} />
+          <Hand />
         </g>
       )}
     </svg>

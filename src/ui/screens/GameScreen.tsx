@@ -6,6 +6,8 @@ import { formatTime, type T } from '../../i18n';
 import { sessionLabel, useGame } from '../../store/game';
 import { Board } from '../board/Board';
 import { Rhythm } from '../board/Rhythm';
+import { GuideSheet, InfoButton } from '../components/Guide';
+import { landingNote, nowLine, onSolution } from '../explain';
 import { useElementSize, useReducedMotion, useT } from '../hooks';
 import { EndCardSheet } from './EndCardSheet';
 
@@ -31,6 +33,10 @@ function hintText(h: Hint, t: T): string {
   }
 }
 
+/** Tutorial levels where the finger always shows the next stone; elsewhere it appears after a pause. */
+const ALWAYS_FINGER = ['T1', 'T2', 'T3', 'T5', 'T6'];
+const IDLE_MS = 5000;
+
 const DIRS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 
 export function GameScreen() {
@@ -47,6 +53,10 @@ export function GameScreen() {
   const [pulseKey, setPulseKey] = useState(0);
   const [replay, setReplay] = useState(-1);
   const [showCard, setShowCard] = useState(false);
+  const [guide, setGuide] = useState(false);
+  const guideOpen = useRef(false);
+  guideOpen.current = guide;
+  const [idle, setIdle] = useState(false);
   const busy = useRef(false);
   const lastInput = useRef(Date.now());
   const [wrapRef, wrap] = useElementSize<HTMLDivElement>();
@@ -65,11 +75,18 @@ export function GameScreen() {
       const now = performance.now();
       const dt = now - prev;
       prev = now;
-      if (document.visibilityState !== 'visible' || Date.now() - lastInput.current > 60_000) return;
+      if (document.visibilityState !== 'visible' || guideOpen.current || Date.now() - lastInput.current > 60_000) return;
       if (!g().session?.solved) g().addElapsed(Math.min(dt, 2000));
     }, 1000);
     return () => clearInterval(id);
   }, [g]);
+
+  // The finger appears after a short pause where the player has to think (two choices, hidden start).
+  useEffect(() => {
+    setIdle(false);
+    const id = setTimeout(() => setIdle(true), IDLE_MS);
+    return () => clearTimeout(id);
+  }, [path.length, level.id]);
 
   useEffect(() => {
     if (dead) {
@@ -179,7 +196,7 @@ export function GameScreen() {
   // Keyboard: arrows jump, Z undo, R reset, H help.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (showCard || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (showCard || guideOpen.current || e.metaKey || e.ctrlKey || e.altKey) return;
       const s = g().session!;
       const k = e.key.toLowerCase();
       if (k === 'z') return undo();
@@ -206,11 +223,31 @@ export function GameScreen() {
   const boardSize = Math.max(200, Math.min(wrap.w, wrap.h));
   const hintTarget = session.hint && (session.hint.kind === 'mark' || session.hint.kind === 'startMark') ? session.hint.target : null;
 
+  const tutorial = session.kind === 'tutorial';
+  const tutTarget = tutorial && !session.solved && onSolution(level, path) && path.length < level.solution.length ? level.solution[path.length] : null;
+  const finger = hintTarget ?? (tutTarget !== null && (ALWAYS_FINGER.includes(level.id) || idle) ? tutTarget : null);
+  const count = finger !== null && path.length > 0 && !session.solved ? { from: path[path.length - 1], to: finger } : null;
+
+  // Tutorial coach (above the board, where the eyes are): the lesson, what to do now, and why.
+  let coachNow: string | null = null;
+  let coachWhy: string | null = null;
+  if (tutorial && !session.solved && !dead) {
+    if (hidden) coachNow = t('game.chooseStart');
+    else {
+      coachNow = nowLine(level, path, finger, t);
+      coachWhy = path.length === 1 ? t('ex.first') : landingNote(level, path, t);
+    }
+  }
+  // Easy and medium: always say how many steps the next jump is.
+  const easyOrMedium = level.band === 'T' || /^[KO]/.test(level.band);
+  const showSteps = !tutorial && easyOrMedium && !hidden && !session.solved && !dead;
+  const stepsWhy = showSteps && (lastKind === 'H' || lastKind === 'R') ? landingNote(level, path, t) : null;
+  const [stepsA, stepsB] = t('game.nextSteps', { n: '\u0000' }).split('\u0000');
+
   let line: Msg = msg;
   if (!line && session.solved) line = { text: t('end.solved') };
   if (!line && dead) line = { text: t('msg.deadEnd') };
-  if (!line && session.kind === 'tutorial') line = { text: t(`tut.${level.id}` as never) };
-  if (!line && hidden) line = { text: t('game.chooseStart') };
+  if (!line && hidden && !tutorial) line = { text: t('game.chooseStart') };
 
   return (
     <div className="screen">
@@ -223,8 +260,22 @@ export function GameScreen() {
           {settings.showTimer && <span className="muted">{formatTime(session.elapsedMs)} · </span>}
           {t('game.progress', { a: path.length, b: level.stones.length })}
         </div>
+        <InfoButton onClick={() => setGuide(true)} />
       </div>
       <Rhythm rhythm={rhythm} held={lastKind === 'H'} t={t} hidden={hidden} />
+      {showSteps && (
+        <div className="next-steps" key={path.length}>
+          {stepsA}<b>{rhythm.len}</b>{stepsB}
+          {stepsWhy && <span className="why">{stepsWhy}</span>}
+        </div>
+      )}
+      {tutorial && !session.solved && (
+        <div className="coach" key={`${level.id}-${path.length}-${dead}`} role="status">
+          <span className="lesson">{t(`tut.${level.id}` as never)}</span>
+          {coachNow && <span className="now">{coachNow}</span>}
+          {coachWhy && <span className="why">{coachWhy}</span>}
+        </div>
+      )}
       <div className="board-wrap" ref={wrapRef}>
         {wrap.w > 0 && (
           <Board
@@ -240,6 +291,8 @@ export function GameScreen() {
             shake={shake}
             replay={replay}
             showStartRing={level.start !== null}
+            finger={finger}
+            count={count}
           />
         )}
       </div>
@@ -275,6 +328,7 @@ export function GameScreen() {
         </button>
       </div>
       {showCard && endCard && <EndCardSheet card={endCard} />}
+      {guide && <GuideSheet onClose={() => setGuide(false)} />}
     </div>
   );
 }
