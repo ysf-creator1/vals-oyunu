@@ -22,6 +22,8 @@ export interface BoardProps {
   finger?: number | null;
   /** Numbered step markers along a straight jump: shows why the target is the right distance. */
   count?: { from: number; to: number } | null;
+  /** Stones on a wrong branch (shown in the warning colour until undone). */
+  wrong?: number[];
 }
 
 const PAD = 0.12;
@@ -133,6 +135,14 @@ function BoardImpl(p: BoardProps) {
   const W = level.w;
   const H = level.h;
   const visitedAt = new Map(path.map((s, i) => [s, i]));
+  // Label on a visited stone: 0 on the start, otherwise the length of the jump that landed there (1-2-3 rhythm).
+  const jumpLen = (vi: number) => {
+    if (vi === 0) return 0;
+    const [ax, ay] = level.stones[path[vi - 1]];
+    const [bx, by] = level.stones[path[vi]];
+    return Math.abs(bx - ax) + Math.abs(by - ay);
+  };
+  const wrongSet = new Set(p.wrong ?? []);
   const active = path.length ? path[path.length - 1] : null;
   const targets = new Set(p.targets ?? []);
   const flat = theme === 'stars';
@@ -215,6 +225,7 @@ function BoardImpl(p: BoardProps) {
         const isActive = i === active;
         const isTarget = targets.has(i);
         const shake = p.shake && p.shake.stone === i;
+        const isWrong = visited && wrongSet.has(i);
         const state = isActive ? t('a11y.active') : visited ? t('a11y.visited', { n: vi + 1 }) : t('a11y.unvisited');
         const label = t('a11y.stone', { col: x + 1, row: y + 1, kind: t(`a11y.kind.${kind}`), state });
         return (
@@ -242,8 +253,8 @@ function BoardImpl(p: BoardProps) {
                 x={x}
                 y={y}
                 theme={theme}
-                fill={visited ? 'var(--b-visited)' : 'var(--b-fill)'}
-                stroke={visited ? 'var(--b-visited)' : 'var(--b-stroke)'}
+                fill={isWrong ? 'var(--b-wrong)' : visited ? 'var(--b-visited)' : 'var(--b-fill)'}
+                stroke={isWrong ? 'var(--b-wrong)' : visited ? 'var(--b-visited)' : 'var(--b-stroke)'}
                 sw={0.06}
               />
               {visited && (
@@ -257,10 +268,11 @@ function BoardImpl(p: BoardProps) {
                   fill="var(--b-num)"
                   style={{ pointerEvents: 'none' }}
                 >
-                  {vi + 1}
+                  {jumpLen(vi)}
                 </text>
               )}
             </g>
+            {isWrong && <circle cx={c(x)} cy={c(y)} r={0.46} fill="none" stroke="var(--b-wrong)" strokeWidth={0.06} />}
             {p.hintTarget === i && (
               <circle cx={c(x)} cy={c(y)} r={0.46} fill="none" stroke="var(--b-accent)" strokeWidth={0.06} strokeDasharray="0.12 0.09" className="glow" />
             )}

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { unlockAudio } from '../audio/synth';
 import { useGame } from '../store/game';
+import { Toaster } from './components/Toast';
 import { useApplySettings } from './hooks';
 import { EndlessScreen } from './screens/EndlessScreen';
 import { GameScreen } from './screens/GameScreen';
@@ -41,5 +42,5 @@ export function App() {
   else if (screen === 'howto') body = <HowToScreen />;
   else body = <HomeScreen />;
 
-  return <div className="app">{body}</div>;
+  return <div className="app">{body}<Toaster /></div>;
 }

@@ -313,8 +313,7 @@ export function sessionLabel(s: Session, t: T): string {
   const tierName = t(`tier.${tierOf(band)}` as StringKey);
   if (s.kind === 'daily') return `${t('game.daily')} · ${tierName}`;
   if (s.kind === 'endless') return `${t('game.endless')} · ${tierName}`;
-  const num = (Number(band[1]) - 1) * 40 + (s.pos?.index ?? 0) + 1;
-  return t('game.label', { tier: tierName, n: num });
+  return t('game.label', { tier: tierName, stage: band[1], n: (s.pos?.index ?? 0) + 1 });
 }
 
 export const rhythmOf = (s: Session) => rhythmAfter(s.level, s.path);

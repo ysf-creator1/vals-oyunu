@@ -52,7 +52,7 @@ export function LevelsScreen() {
               {Array.from({ length: LEVELS_PER_BAND }, (_, i) => {
                 const r = profile.results[levelId(band, i)];
                 const unlocked = isUnlocked(profile, band, i);
-                const n = bi * 40 + i + 1;
+                const n = i + 1;
                 const isCur = cont.band === band && cont.index === i;
                 return (
                   <button

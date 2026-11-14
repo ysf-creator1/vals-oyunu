@@ -52,6 +52,8 @@ export function GameScreen() {
   const [shake, setShake] = useState<{ stone: number; key: number } | null>(null);
   const [pulseKey, setPulseKey] = useState(0);
   const [replay, setReplay] = useState(-1);
+  // Wrong branch found by Help: stones from `at` onward stay highlighted while that branch is still on the path.
+  const [wrongMark, setWrongMark] = useState<{ at: number; stone: number } | null>(null);
   const [showCard, setShowCard] = useState(false);
   const [guide, setGuide] = useState(false);
   const guideOpen = useRef(false);
@@ -168,6 +170,7 @@ export function GameScreen() {
     const h = g().help();
     if (!h) return;
     if (h.kind === 'wrong') {
+      setWrongMark({ at: h.move, stone: g().session!.path[h.move] });
       setMsg({ text: hintText(h, t), action: { label: t('hint.rewind'), fn: () => { g().rewindTo(h.rewindTo); setMsg(null); } } });
     } else setMsg({ text: hintText(h, t) });
   };
@@ -219,6 +222,8 @@ export function GameScreen() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   });
+
+  const wrongStones = wrongMark && path[wrongMark.at] === wrongMark.stone ? path.slice(wrongMark.at) : [];
 
   const boardSize = Math.max(200, Math.min(wrap.w, wrap.h));
   const hintTarget = session.hint && (session.hint.kind === 'mark' || session.hint.kind === 'startMark') ? session.hint.target : null;
@@ -293,6 +298,7 @@ export function GameScreen() {
             showStartRing={level.start !== null}
             finger={finger}
             count={count}
+            wrong={wrongStones}
           />
         )}
       </div>

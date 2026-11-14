@@ -29,8 +29,7 @@ export function HomeScreen() {
   const streak = currentStreak(profile.daily, today);
   const resuming = session && !session.solved;
   const c = continueTarget(profile);
-  const num = (Number(c.band[1]) - 1) * 40 + c.index + 1;
-  const nextLabel = `${t(`tier.${tierOf(c.band)}` as StringKey)} · ${num}`;
+  const nextLabel = t('game.label', { tier: t(`tier.${tierOf(c.band)}` as StringKey), stage: c.band[1], n: c.index + 1 });
   const [guide, setGuide] = useState(false);
 
   return (

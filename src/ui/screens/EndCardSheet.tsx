@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import type { BandId } from '../../engine/types';
 import { formatTime, type StringKey, type T } from '../../i18n';
 import { tierOf } from '../../progression/bands';
 import type { Profile } from '../../progression/profile';
 import { currentStreak, dateKey } from '../../progression/streak';
 import { useGame, type EndCard } from '../../store/game';
+import { toast } from '../components/Toast';
 import { useT } from '../hooks';
 
 export function shareText(p: Profile, t: T, now = new Date()): string | null {
@@ -41,9 +42,15 @@ export function EndCardSheet({ card }: { card: EndCard }) {
   const profile = useGame((s) => s.profile);
   const showTimer = profile.settings.showTimer;
   const g = useGame.getState;
-  const [toast, setToast] = useState<string | null>(null);
   const primary = useRef<HTMLButtonElement>(null);
   useEffect(() => primary.current?.focus(), []);
+  // Band promotion inside the same tier: a short self-dismissing line (tier changes get the full note below).
+  useEffect(() => {
+    const p = card.events.promoted;
+    if (!p || card.events.tierUp) return;
+    const jumped = Number(p.to[1]) - Number(p.from[1]) > 1;
+    toast(t(jumped ? 'toast.bandJump' : 'toast.bandUp', { tier: t(`tier.${tierOf(p.to)}` as StringKey), stage: p.to[1] }));
+  }, [card]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tierName = (tier: string) => t(`tier.${tier}` as StringKey);
   const tutorial = card.kind === 'tutorial';
@@ -52,8 +59,7 @@ export function EndCardSheet({ card }: { card: EndCard }) {
     const text = shareText(profile, t);
     if (!text) return;
     if ((await share(text)) === 'copied') {
-      setToast(t('end.copied'));
-      setTimeout(() => setToast(null), 1800);
+      toast(t('end.copied'));
     }
   };
 
@@ -125,7 +131,6 @@ export function EndCardSheet({ card }: { card: EndCard }) {
           <button className="btn" onClick={() => g().setScreen('home')}>{t('end.home')}</button>
         </div>
       </div>
-      {toast && <div className="toast" role="status">{toast}</div>}
     </div>
   );
 }
