@@ -140,9 +140,18 @@ describe('generator', () => {
     const a = dailyLevel(d);
     const b = dailyLevel(new Date(2026, 10, 14, 23, 30));
     expect(a).toEqual(b);
-    expect(a.band).toBe('Z1'); // Saturday
+    expect(a.band).toBe('O4'); // Saturday: a big Hard puzzle
+    expect(a.stones.length).toBe(13);
     expect(a.id).toBe('D-2026-11-14');
     expect(solve(a).solutions).toEqual([a.solution]);
     expect(performance.now() - t0).toBeLessThan(2000);
+  });
+  it('every daily puzzle has a marked start', () => {
+    for (let day = 1; day <= 28; day++) {
+      const l = dailyLevel(new Date(2026, 10, day, 12));
+      expect(l.start, l.id).toBe(0);
+      expect(l.solution[0]).toBe(0);
+      expect(solve(l).solutions, l.id).toEqual([l.solution]);
+    }
   });
 });

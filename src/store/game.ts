@@ -98,7 +98,9 @@ function newSession(kind: Session['kind'], level: Level, extra: Partial<Session>
 
 const saved = loadSaved();
 const initialProfile = migrateProfile(saved.profile);
-const initialSession = (saved.session as Session | null) ?? null;
+const savedSession = (saved.session as Session | null) ?? null;
+// Daily puzzles now always show their start; drop a saved hidden-start daily from an older version.
+const initialSession = savedSession && savedSession.kind === 'daily' && savedSession.level.start === null ? null : savedSession;
 
 export const useGame = create<State>((set, get) => {
   const setSession = (fn: (s: Session) => Session) => {
@@ -150,7 +152,7 @@ export const useGame = create<State>((set, get) => {
       const today = new Date();
       const id = `D-${dateKey(today)}`;
       const s = get().session;
-      if (s && s.level.id === id && !s.solved) return set({ screen: 'game', endCard: null });
+      if (s && s.level.id === id && !s.solved && s.level.start !== null) return set({ screen: 'game', endCard: null });
       open(newSession('daily', dailyLevel(today)));
     },
 

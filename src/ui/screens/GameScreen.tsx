@@ -3,7 +3,6 @@ import { playError, playJump, playMelody, unlockAudio, vibrate } from '../../aud
 import type { Hint } from '../../engine/hint';
 import { isDeadEnd, legalMoves, rhythmAfter } from '../../engine/rules';
 import { formatTime, type T } from '../../i18n';
-import { tierOf } from '../../progression/bands';
 import { sessionLabel, useGame } from '../../store/game';
 import { Board } from '../board/Board';
 import { Rhythm } from '../board/Rhythm';
@@ -57,7 +56,7 @@ export function GameScreen() {
   guideOpen.current = guide;
   // First extra-hard level: a short card that says the start must be found too, then closes itself.
   const [intro, setIntro] = useState(
-    () => session.level.band !== 'T' && tierOf(session.level.band) === 'extra' && !g().profile.extraIntroSeen,
+    () => session.level.start === null && session.kind !== 'tutorial' && !g().profile.extraIntroSeen,
   );
   const introOpen = useRef(intro);
   introOpen.current = intro;
