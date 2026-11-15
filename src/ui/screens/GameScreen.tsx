@@ -34,7 +34,7 @@ const IDLE_MS = 5000;
  * The first campaign levels keep the tutorial's training wheels: glowing targets, the steps counted after each jump,
  * a reason and a dashed line on a wrong tap, and the finger after a long pause or two wrong taps (free, no star cost).
  */
-const EARLY_LEVELS = 3;
+const EARLY_LEVELS = 6;
 const STUCK_MS = 15000;
 /** The very first campaign level: the finger leads the first moves, then lets go. */
 const LED_MOVES = 2;
