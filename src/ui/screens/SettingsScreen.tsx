@@ -92,6 +92,7 @@ export function SettingsScreen() {
           >
             {t('settings.reset')}
           </button>
+          <p className="muted" style={{ fontSize: '0.8rem', marginTop: 16 }}>{t('settings.privacy')}</p>
         </div>
       </div>
     </div>

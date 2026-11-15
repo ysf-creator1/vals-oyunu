@@ -32,6 +32,8 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,json,webmanifest}'],
         navigateFallback: 'index.html',
+        // The Oracle host serves the usage report and event endpoint under /api: never answer those with the game.
+        navigateFallbackDenylist: [/^\/api\//],
       },
     }),
   ],

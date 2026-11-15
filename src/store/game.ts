@@ -9,10 +9,11 @@ import {
 } from '../progression/adaptive';
 import { levelId, stageOf, targetMs, tierOf, TUTORIAL_BEFORE, type Tier } from '../progression/bands';
 import { dailyLevel, endlessLevel, titleOf, unlockedThemes, type Title } from '../progression/daily';
-import { defaultProfile, migrateProfile, type Profile, type Settings, type ThemeId } from '../progression/profile';
+import { defaultProfile, migrateProfile, totalSolved, type Profile, type Settings, type ThemeId } from '../progression/profile';
 import { classify, isFastBadge, starsFor, type Stars } from '../progression/stars';
 import { dateKey, recordDailySolve } from '../progression/streak';
 import type { StringKey, T } from '../i18n';
+import { deviceInfo, flush as flushEvents, isFirstVisit, track } from '../analytics/track';
 import { clearSaved, loadSaved, save } from './persist';
 
 const LEVELS = levelsJson as unknown as Level[];
@@ -39,6 +40,8 @@ export interface Session {
   hintKey: string;
   hint: Hint | null;
   solved: boolean;
+  /** Rejected taps (wrong distance, visited stone…), for the usage report. */
+  misses?: number;
   /** Unique per started session; the game screen remounts on change. */
   nonce: number;
 }
@@ -89,6 +92,16 @@ interface State {
 
 const pathKey = (p: number[]) => p.join(',');
 
+/** Fields that describe a session in usage events. */
+const lv = (s: Session) => ({ mod: s.kind, seviye: s.level.id, bant: s.level.band, tas: s.level.stones.length });
+/** A level counts as abandoned only if the player actually tried it. */
+const tried = (s: Session) => !s.solved && (s.path.length > initialPath(s.level).length || s.elapsedMs > 5000);
+const abandoned = (s: Session, closed: boolean) =>
+  track('birakti', {
+    ...lv(s), sn: Math.round(s.elapsedMs / 1000), adim: s.path.length, ipucu: s.hintSteps.length + s.wrongCount,
+    hata: s.misses ?? 0, kapatti: closed,
+  });
+
 function newSession(kind: Session['kind'], level: Level, extra: Partial<Session> = {}): Session {
   return {
     kind, level, path: initialPath(level), redo: null, elapsedMs: 0, hintSteps: [], wrongCount: 0,
@@ -107,7 +120,12 @@ export const useGame = create<State>((set, get) => {
     const s = get().session;
     if (s) set({ session: fn(s) });
   };
-  const open = (session: Session) => set({ session, screen: 'game', endCard: null });
+  const open = (session: Session) => {
+    const prev = get().session;
+    if (prev && prev.nonce !== session.nonce && tried(prev)) abandoned(prev, false);
+    track('basla', lv(session));
+    set({ session, screen: 'game', endCard: null });
+  };
 
   return {
     profile: initialProfile,
@@ -115,10 +133,17 @@ export const useGame = create<State>((set, get) => {
     screen: initialSession && !initialSession.solved ? 'game' : 'home',
     endCard: null,
 
-    setScreen: (screen) => set({ screen, endCard: null }),
+    setScreen: (screen) => {
+      if (screen !== get().screen && screen !== 'game') track('ekran', { ekran: screen });
+      set({ screen, endCard: null });
+    },
     updateProfile: (fn) => set({ profile: fn(get().profile) }),
-    setSetting: (k, v) => set({ profile: { ...get().profile, settings: { ...get().profile.settings, [k]: v } } }),
+    setSetting: (k, v) => {
+      track('ayar', { ayar: k, deger: String(v) });
+      set({ profile: { ...get().profile, settings: { ...get().profile.settings, [k]: v } } });
+    },
     resetProgress: () => {
+      track('sifirla', { cozulen: totalSolved(get().profile), bant: get().profile.currentBand });
       const settings = get().profile.settings;
       clearSaved();
       set({ profile: { ...defaultProfile(), settings }, session: null, endCard: null, screen: 'home' });
@@ -174,6 +199,7 @@ export const useGame = create<State>((set, get) => {
       }
       const r = tryMove(s.level, s.path, stone);
       if (r.ok) setSession((x) => ({ ...x, path: r.path, redo: null, hint: null, solved: isSolved(x.level, r.path) }));
+      else setSession((x) => ({ ...x, misses: (x.misses ?? 0) + 1 }));
       return r;
     },
     undo: () => setSession((x) => {
@@ -192,6 +218,7 @@ export const useGame = create<State>((set, get) => {
       const h = computeHint(s.level, s.path);
       let { hintSteps, wrongCount } = s;
       if (s.hintKey !== key) {
+        track('yardim', { ...lv(s), ne: h.kind, adim: s.path.length });
         if (h.kind === 'wrong') wrongCount += 1;
         if ((h.kind === 'next' || h.kind === 'start') && !hintSteps.includes(s.path.length)) hintSteps = [...hintSteps, s.path.length];
       }
@@ -215,6 +242,7 @@ export const useGame = create<State>((set, get) => {
       const themesBefore = p.themesUnlocked;
       let events: AdaptiveEvents = {};
       let tutorialFinished = false;
+      const firstSolve = s.kind === 'campaign' && !p.results[s.level.id];
 
       const bumpStats = (b: BandId) => {
         p = {
@@ -261,6 +289,16 @@ export const useGame = create<State>((set, get) => {
       p = { ...p, themesUnlocked: themes };
       const titleAfter = titleOf(p);
       set({ profile: p });
+      track('bitti', {
+        ...lv(s), sn: Math.round(ms / 1000), yildiz: stars, ipucu: hints, yanlis: s.wrongCount, hata: s.misses ?? 0,
+        hizli: fast, ilk: s.kind === 'campaign' ? firstSolve : undefined,
+        son: s.kind === 'tutorial' ? tutorialFinished : undefined,
+        yukseldi: events.promoted ? `${events.promoted.from}>${events.promoted.to}` : undefined,
+        kademe: events.tierUp ? `${events.tierUp.from}>${events.tierUp.to}` : undefined,
+        teklif: events.offerEasier || undefined,
+        seri: s.kind === 'daily' ? p.daily.streak : undefined,
+        simdiki: p.currentBand,
+      });
 
       const next = () => {
         const st = get();
@@ -291,6 +329,7 @@ export const useGame = create<State>((set, get) => {
 
     answerEasier: (yes) => {
       const c = get().endCard;
+      track('kolay_teklif', { kabul: yes, bant: get().profile.currentBand });
       if (yes) get().updateProfile(acceptEasier);
       if (c) set({ endCard: { ...c, offerAnswered: yes ? 'yes' : 'no' } });
     },
@@ -298,6 +337,7 @@ export const useGame = create<State>((set, get) => {
       const c = get().endCard;
       const from = c?.events.tierUp?.from;
       if (!c || !from) return;
+      track('kademede_kal', { kademe: from });
       get().updateProfile((p) => stayInTier(p, from));
       set({ endCard: { ...c, stayed: true } });
     },
@@ -305,6 +345,44 @@ export const useGame = create<State>((set, get) => {
 });
 
 useGame.subscribe((st) => save({ profile: st.profile, session: st.session }));
+
+// ---- usage report: app open, visible play time, levels left when the page closes ----
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  let visibleSince = Date.now();
+  const sendVisible = () => {
+    const sn = Math.round((Date.now() - visibleSince) / 1000);
+    if (sn >= 2) track('oturum', { sn: Math.min(sn, 6 * 3600), ekran: useGame.getState().screen });
+    visibleSince = Date.now();
+  };
+  // Registered before the first track() call, so these run before the tracker's own flush on hide.
+  window.addEventListener('pagehide', () => {
+    const { session, screen } = useGame.getState();
+    if (screen === 'game' && session && tried(session)) abandoned(session, true);
+    sendVisible();
+    flushEvents();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      sendVisible();
+      flushEvents();
+    } else visibleSince = Date.now();
+  });
+  const p = useGame.getState().profile;
+  const ua = navigator.userAgent;
+  track('acilis', {
+    yeni: isFirstVisit(),
+    mobil: /Mobi|Android|iPhone|iPad/i.test(ua) || (navigator.maxTouchPoints > 1 && /Mac/.test(ua)),
+    ...deviceInfo(),
+    dil: p.settings.lang,
+    bant: p.currentBand,
+    oto: p.mode === 'auto',
+    cozulen: totalSolved(p),
+    seri: p.daily.streak,
+    tema: p.settings.theme,
+    ekran: `${Math.round(screen.width)}x${Math.round(screen.height)}`,
+    devam: !!initialSession && !initialSession.solved,
+  });
+}
 
 /** Label like "Zor 2 · 5" for the top bar: tier, stage inside the tier, level number inside the stage. */
 export function sessionLabel(s: Session, t: T): string {

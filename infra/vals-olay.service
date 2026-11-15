@@ -1,0 +1,19 @@
+[Unit]
+Description=Vals kullanım olayları ve rapor sunucusu
+After=network-online.target
+
+[Service]
+User=vals
+WorkingDirectory=/opt/vals/kod
+Environment=NODE_ENV=production PORT=8791 VERI=/opt/vals/veri
+ExecStart=/usr/local/bin/node vals-sunucu.js
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/vals/veri
+
+[Install]
+WantedBy=multi-user.target

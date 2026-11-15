@@ -1,0 +1,16 @@
+{
+  "name": "vals-sunucu",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Vals kullanım olayları ve canlı rapor sunucusu",
+  "main": "vals-sunucu.js",
+  "scripts": {
+    "start": "node vals-sunucu.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "maxmind": "5.0.7"
+  }
+}

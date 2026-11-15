@@ -122,6 +122,7 @@ export const en: Record<StringKey, string> = {
   'settings.theme': 'Theme',
   'settings.lang': 'Language',
   'settings.reset': 'Reset progress',
+  'settings.privacy': 'Anonymous usage data is sent to improve the game: app opens, solved levels, times and approximate city. No name, account or location permission is asked for.',
   'settings.resetConfirm': 'Delete all progress? This cannot be undone.',
   'settings.locked': 'Locked: {cond}',
   'settings.on': 'On',
