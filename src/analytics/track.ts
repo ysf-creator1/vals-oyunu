@@ -4,7 +4,11 @@
  * network part of the IP (for an approximate city/country). Every call is a no-op outside a real browser,
  * in dev builds, in automated browsers, on localhost and with ?debug, so tests never pollute the report.
  */
+declare const __SURUM__: string;
+
 const ORACLE_HOST = 'vals.130-61-214-155.sslip.io';
+/** Build stamp (UTC "YYYY-MM-DD HH:MM"), set by vite.config.ts. */
+export const VERSION = typeof __SURUM__ === 'string' ? __SURUM__ : 'dev';
 const DEVICE_KEY = 'vals:cihaz';
 
 type Value = string | number | boolean | undefined;
@@ -47,6 +51,20 @@ function setup(): Ctx | null {
   const url = location.hostname === ORACLE_HOST ? '/api/olay' : `https://${ORACLE_HOST}/api/olay`;
 
   window.addEventListener('pagehide', () => flush());
+  // Script errors, so a crash on some phone shows up in the report. Only the message and file:line, at most 5 per page.
+  let errors = 0;
+  const report = (msg: unknown, where: string) => {
+    if (++errors > 5) return;
+    track('hata_js', { mesaj: String(msg ?? '').slice(0, 40), yer: where.slice(-40), surum: VERSION });
+  };
+  window.addEventListener('error', (e) => {
+    const file = String(e.filename || '').split('/').pop() || '?';
+    report(e.message, `${file}:${e.lineno || 0}:${e.colno || 0}`);
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    const r = e.reason as { message?: string } | undefined;
+    report(r?.message ?? r, 'promise');
+  });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flush();
   });
@@ -70,6 +88,20 @@ export const deviceInfo = () => {
   const c = context();
   return c ? { kaynak: c.source, site: c.site } : {};
 };
+
+/**
+ * Phone model where the browser offers it without asking: Chrome/Edge/Samsung on Android ("SM-A546E").
+ * iPhones and other browsers never reveal it; the report then guesses the size class from the screen.
+ * Resolves within 800 ms either way.
+ */
+export function deviceModel(): Promise<string> {
+  const uad = (navigator as { userAgentData?: { getHighEntropyValues?: (h: string[]) => Promise<{ model?: string }> } }).userAgentData;
+  if (!context() || !uad?.getHighEntropyValues) return Promise.resolve('');
+  return Promise.race([
+    uad.getHighEntropyValues(['model']).then((v) => String(v.model ?? '').slice(0, 40), () => ''),
+    new Promise<string>((r) => setTimeout(() => r(''), 800)),
+  ]);
+}
 
 export function track(tur: string, data: EventData = {}) {
   const c = context();

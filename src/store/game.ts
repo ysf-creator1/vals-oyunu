@@ -13,7 +13,7 @@ import { defaultProfile, migrateProfile, totalSolved, type Profile, type Setting
 import { classify, isFastBadge, starsFor, type Stars } from '../progression/stars';
 import { dateKey, recordDailySolve } from '../progression/streak';
 import type { StringKey, T } from '../i18n';
-import { deviceInfo, flush as flushEvents, isFirstVisit, track } from '../analytics/track';
+import { deviceInfo, deviceModel, flush as flushEvents, isFirstVisit, track, VERSION } from '../analytics/track';
 import { clearSaved, loadSaved, save } from './persist';
 
 const LEVELS = levelsJson as unknown as Level[];
@@ -218,7 +218,7 @@ export const useGame = create<State>((set, get) => {
       const h = computeHint(s.level, s.path);
       let { hintSteps, wrongCount } = s;
       if (s.hintKey !== key) {
-        track('yardim', { ...lv(s), ne: h.kind, adim: s.path.length });
+        track('yardim', { ...lv(s), ne: h.kind, adim: s.path.length, sn: Math.round(s.elapsedMs / 1000) });
         if (h.kind === 'wrong') wrongCount += 1;
         if ((h.kind === 'next' || h.kind === 'start') && !hintSteps.includes(s.path.length)) hintSteps = [...hintSteps, s.path.length];
       }
@@ -369,8 +369,9 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   });
   const p = useGame.getState().profile;
   const ua = navigator.userAgent;
-  track('acilis', {
-    yeni: isFirstVisit(),
+  const yeni = isFirstVisit();
+  void deviceModel().then((model) => track('acilis', {
+    yeni,
     mobil: /Mobi|Android|iPhone|iPad/i.test(ua) || (navigator.maxTouchPoints > 1 && /Mac/.test(ua)),
     ...deviceInfo(),
     dil: p.settings.lang,
@@ -380,8 +381,11 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     seri: p.daily.streak,
     tema: p.settings.theme,
     ekran: `${Math.round(screen.width)}x${Math.round(screen.height)}`,
+    dpr: Math.round((window.devicePixelRatio || 1) * 100) / 100,
+    model: model || undefined,
+    surum: VERSION,
     devam: !!initialSession && !initialSession.solved,
-  });
+  }));
 }
 
 /** Label like "Zor 2 · 5" for the top bar: tier, stage inside the tier, level number inside the stage. */

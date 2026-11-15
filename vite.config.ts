@@ -6,6 +6,8 @@ import { VitePWA } from 'vite-plugin-pwa';
 // Relative base: the same build works on GitHub Pages (/vals-oyunu/) and on the Oracle host (/).
 export default defineConfig({
   base: './',
+  // Build stamp sent with usage events, so the report can tell which version an error came from.
+  define: { __SURUM__: JSON.stringify(new Date().toISOString().slice(0, 16).replace('T', ' ')) },
   plugins: [
     react(),
     VitePWA({

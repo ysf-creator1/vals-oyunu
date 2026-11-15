@@ -26,7 +26,7 @@ const KEY_FILE = path.join(VERI, 'rapor-anahtar.txt');
 const PAGE = path.join(__dirname, 'rapor.html');
 const KEEP_DAYS = 400;
 const ORIGINS = ['https://ysf-creator1.github.io', 'https://vals.130-61-214-155.sslip.io'];
-const TURLER = new Set(['acilis', 'basla', 'bitti', 'birakti', 'yardim', 'ekran', 'ayar', 'sifirla', 'kolay_teklif', 'kademede_kal', 'oturum']);
+const TURLER = new Set(['acilis', 'basla', 'bitti', 'birakti', 'yardim', 'ekran', 'ayar', 'sifirla', 'kolay_teklif', 'kademede_kal', 'oturum', 'hata_js']);
 
 fs.mkdirSync(DIR, { recursive: true });
 const log = (...a) => console.log(new Date().toISOString(), ...a);

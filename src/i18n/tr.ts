@@ -121,7 +121,7 @@ export const tr = {
   'settings.theme': 'Tema',
   'settings.lang': 'Dil',
   'settings.reset': 'İlerlemeyi sıfırla',
-  'settings.privacy': 'Oyunu geliştirmek için adsız kullanım bilgisi gönderilir: açılışlar, çözülen seviyeler, süreler ve yaklaşık şehir. Ad, hesap ya da konum izni istenmez.',
+  'settings.privacy': 'Oyunu geliştirmek için adsız kullanım bilgisi gönderilir: açılışlar, çözülen seviyeler, süreler, cihaz türü ve yaklaşık şehir. Ad, hesap ya da konum izni istenmez.',
   'settings.resetConfirm': 'Tüm ilerleme silinsin mi? Bu geri alınamaz.',
   'settings.locked': 'Kilitli: {cond}',
   'settings.on': 'Açık',

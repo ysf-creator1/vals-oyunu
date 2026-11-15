@@ -161,6 +161,19 @@ const daysBetween = (a, b) => Math.round((dayMs(b) - dayMs(a)) / 864e5);
 const short = s => fDayShort.format(dayMs(s));
 const dilimOf = h => DILIM.find(b => b[2](h));
 const count = (A, f) => { const m = new Map(); for (const e of A) { const k = f(e); if (k != null) m.set(k, (m.get(k) || 0) + 1); } return m; };
+// iPhone boy sınıfı: Apple modeli göstermez; ekran ölçüsü (CSS piksel) ve piksel yoğunluğundan tahmin
+const IPHONE = { '320x568': 'iPhone SE (1.) / 5s', '375x667': 'iPhone SE (2./3.) / 6–8', '414x736': 'iPhone 6–8 Plus', '375x812': 'iPhone X / XS / 11 Pro / mini', '414x896': 'iPhone XR / 11 / XS Max / 11 Pro Max', '390x844': 'iPhone 12 / 13 / 14 / 16e', '428x926': 'iPhone 12–13 Pro Max / 14 Plus', '393x852': 'iPhone 14 Pro / 15 / 15 Pro / 16', '430x932': 'iPhone 14 Pro Max / 15 Plus / 15 Pro Max / 16 Plus', '402x874': 'iPhone 16 Pro / 17 / 17 Pro', '420x912': 'iPhone Air', '440x956': 'iPhone 16 Pro Max / 17 Pro Max' };
+const SAMSUNG = { A: 'Galaxy A', S: 'Galaxy S', G: 'Galaxy S (eski)', N: 'Galaxy Note', F: 'Galaxy Z (katlanır)', M: 'Galaxy M', E: 'Galaxy F', X: 'Galaxy Tab', T: 'Galaxy Tab', P: 'Galaxy Tab' };
+function modelOf(e) {
+  if (e.model) { const m = /^SM-([A-Z])/.exec(e.model); return m && SAMSUNG[m[1]] ? `${e.model} (${SAMSUNG[m[1]]})` : e.model; }
+  const [w, h] = String(e.ekran || '').split('x').map(Number);
+  if (e.os === 'iPhone') return (w && h && IPHONE[`${Math.min(w, h)}x${Math.max(w, h)}`]) || 'iPhone (boyu tanınmadı)';
+  if (e.os === 'iPad') return 'iPad';
+  if (e.os === 'Android') return 'Android (tarayıcı modeli vermedi)';
+  return null; // bilgisayar
+}
+const sira = id => { const b = BANTLAR.indexOf(String(id).slice(0, 2)); return (b < 0 ? 99 : b) * 1e4 + (parseInt(String(id).replace(/\D+/g, ' ').trim().split(' ').pop(), 10) || 0); };
+const yerAd = e => !e ? '–' : e.mod === 'tutorial' ? `Öğretici ${String(e.seviye || '').replace(/^T/, '')}` : e.mod === 'campaign' ? `${BANT_AD[e.bant] || e.bant || ''} · ${e.seviye}` : `${MOD_AD[e.mod] || e.mod} · ${BANT_AD[e.bant] || e.bant || ''}`;
 const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } }, del(k) { try { localStorage.removeItem(k); } catch (e) { } } };
 
 let RAW = null, M = null;
@@ -271,7 +284,17 @@ function yeniGelenler(A, B) {
     if (tut.has(k)) t++;
     const n = coz.get(k) || 0; if (n >= 1) r1++; if (n >= 5) r5++; if (n >= 20) r20++;
   }
-  return { n: yeni.length, d1, d1n, d7, d7n, t, r1, r5, r20 };
+  // kohort: ilk geliş gününe (uzun dönemde haftasına) göre geri gelme
+  const haftalik = daysBetween(A, B) > 20, grp = new Map();
+  for (const [k, f] of yeni) {
+    const g = haftalik ? dayAdd(f, -((new Date(dayMs(f)).getUTCDay() + 6) % 7)) : f;
+    let c = grp.get(g); if (!c) grp.set(g, c = { g, n: 0, r: [[0, 0], [0, 0], [0, 0]] });
+    c.n++;
+    const D = days.get(k);
+    [1, 7, 30].forEach((w, i) => { if (dayAdd(f, w) <= today) { c.r[i][1]++; for (let j = 1; j <= w; j++) if (D.has(dayAdd(f, j))) { c.r[i][0]++; break; } } });
+  }
+  const kohort = [...grp.values()].sort((a, b) => a.g < b.g ? 1 : -1).slice(0, 12);
+  return { n: yeni.length, d1, d1n, d7, d7n, t, r1, r5, r20, kohort, haftalik };
 }
 
 // ---------- grafik parçaları ----------
@@ -384,11 +407,11 @@ function render() {
 
   // zorlanılan seviyeler (yalnız kampanya)
   const lvl = new Map();
-  const L = id => { let x = lvl.get(id); if (!x) lvl.set(id, x = { id, bas: new Set(), coz: 0, sn: [], yar: 0, bir: new Set(), hata: 0 }); return x; };
+  const L = id => { let x = lvl.get(id); if (!x) lvl.set(id, x = { id, bas: new Set(), coz: 0, sn: [], yar: 0, bir: new Set(), hata: 0, yil: 0, yardimsiz: 0, cozen: new Set() }); return x; };
   for (const e of S.E) {
     if (e.mod !== 'campaign' || !e.seviye) continue;
     if (e.tur === 'basla') L(e.seviye).bas.add(e.k);
-    if (e.tur === 'bitti') { const x = L(e.seviye); x.coz++; x.sn.push(e.sn || 0); x.hata += e.hata || 0; }
+    if (e.tur === 'bitti') { const x = L(e.seviye); x.coz++; x.sn.push(e.sn || 0); x.hata += e.hata || 0; x.yil += e.yildiz || 0; if (!e.ipucu) x.yardimsiz++; x.cozen.add(e.k); }
     if (e.tur === 'yardim') L(e.seviye).yar++;
     if (e.tur === 'birakti') L(e.seviye).bir.add(e.k);
   }
@@ -415,6 +438,47 @@ function render() {
   const ekrM = count(S.T('ekran'), e => EKRAN_AD[e.ekran] || e.ekran);
   const Y = yeniGelenler(A, B);
 
+  // bölüm bölüm
+  const bolumler = [...lvl.values()].sort((a, b) => sira(a.id) - sira(b.id));
+  const bolumRows = bolumler.map(x => {
+    const b = x.id.slice(0, 2), m = med(x.sn);
+    const yavas = m != null && HEDEF[b] && m > HEDEF[b] * 1.5;
+    return [`${esc(x.id)} <span class="muted">${esc(BANT_AD[b] || '')}</span>`, num(x.bas.size), num(x.cozen.size), num([...x.bir].filter(k => !x.cozen.has(k)).length),
+      m == null ? '–' : `${yavas ? '<b>' : ''}${sure(m)}${yavas ? '</b>' : ''} <span class="muted">/ ${sure(HEDEF[b])}</span>`,
+      num(x.yar), x.coz ? (x.hata / x.coz).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) : '–',
+      x.coz ? (x.yil / x.coz).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) : '–', pct(x.yardimsiz, x.coz)];
+  });
+
+  // telefon modeli ve sürüm (cihaz başına son açılış)
+  const modelM = by(modelOf), surumM = by(e => e.surum || 'eski sürüm (kayıt yok)');
+
+  // bırakma noktası: dönemde oynayıp 7+ gündür hiç gelmeyen cihazların en son oynadığı bölüm
+  const bugun = fDay.format(new Date()), esik = dayAdd(bugun, -7);
+  const sonOlay = new Map(), sonSonuc = new Map(), sonGun = new Map();
+  for (const e of M.E) {
+    if (!e.k || (state.testGizle && M.test.has(e.k))) continue;
+    if (ACT.has(e.tur) && (!sonGun.has(e.k) || e.gun > sonGun.get(e.k))) sonGun.set(e.k, e.gun);
+    if ((e.tur === 'basla' || e.tur === 'bitti' || e.tur === 'birakti') && e.seviye) sonOlay.set(e.k, e);
+    if ((e.tur === 'bitti' || e.tur === 'birakti') && e.seviye) sonSonuc.set(e.k, e);
+  }
+  const gidenler = [...S.dev.keys()].filter(k => (sonGun.get(k) || '') <= esik);
+  const kaldi = new Map(), kaldiCoz = new Map();
+  for (const k of gidenler) { const e = sonOlay.get(k); const y = e ? yerAd(e) : 'Hiç bölüm açmadı'; kaldi.set(y, (kaldi.get(y) || 0) + 1); const r = sonSonuc.get(k); if (r && r.tur === 'birakti' && r.seviye === e.seviye) kaldiCoz.set(y, (kaldiCoz.get(y) || 0) + 1); }
+  const kaldiRows = [...kaldi.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15).map(([y, v]) => [esc(y), num(v), num(kaldiCoz.get(y) || 0)]);
+
+  // yardım zamanlaması: bölümün neresinde (adım / taş sayısı)
+  const yz = S.yar.filter(e => e.tas > 0);
+  const dilimY = [['Başında (ilk üçte bir)', 0], ['Ortasında', 0], ['Sonuna doğru (son üçte bir)', 0]];
+  for (const e of yz) { const f = (e.adim || 0) / e.tas; dilimY[f < 1 / 3 ? 0 : f < 2 / 3 ? 1 : 2][1]++; }
+  const ilkYardim = new Map(); for (const e of S.yar) if (e.sn != null) { const key = e.k + '|' + e.seviye; if (!ilkYardim.has(key)) ilkYardim.set(key, e.sn); }
+  const ilkYardimMed = med([...ilkYardim.values()]);
+  const yardimKad = count(S.yar, e => e.bant ? kademeOf(e.bant) : e.mod === 'tutorial' ? 'Öğretici' : null);
+
+  // hatalar
+  const hatalar = S.T('hata_js'), hataG = new Map();
+  for (const e of hatalar) { const key = `${e.mesaj || '?'}|${e.yer || ''}|${e.surum || ''}`; let h = hataG.get(key); if (!h) hataG.set(key, h = { e, n: 0, k: new Set() }); h.n++; if (e.k) h.k.add(e.k); }
+  const hataRows = [...hataG.values()].sort((a, b) => b.n - a.n).slice(0, 15).map(h => [esc(h.e.mesaj || '?'), `<span class="muted">${esc(h.e.yer || '')}</span>`, esc(h.e.surum || '–'), num(h.n), num(h.k.size)]);
+
   // öne çıkanlar
   const ins = [];
   if (devN) ins.push(`<b>${num(devN)}</b> farklı cihaz oynadı (${newDev} tanesi ilk kez geldi), toplam <b>${sure(S.oyunSn)}</b> oyun süresi.`);
@@ -426,6 +490,9 @@ function render() {
   const topIl = mapRows(il, 1)[0]; if (topIl) ins.push(`En çok cihazın bağlandığı il <b>${esc(topIl.l)}</b> (${topIl.v} cihaz).`);
   if (devN) ins.push(`${devN} cihazın <b>${devN - multiDay}</b>'i yalnızca bir gün geldi; ${multiDay} cihaz birden fazla gün döndü.`);
   if (gb.length) ins.push(`Günlük bulmacayı <b>${new Set(gb.map(e => e.k)).size}</b> cihaz çözdü; en uzun seri ${gbSeri} gün.`);
+  const topKaldi = [...kaldi.entries()].sort((a, b) => b[1] - a[1])[0];
+  if (topKaldi && gidenler.length >= 3) ins.push(`7+ gündür gelmeyen ${gidenler.length} cihazın en çok kaldığı yer <b>${esc(topKaldi[0])}</b> (${topKaldi[1]} cihaz).`);
+  if (hatalar.length) ins.push(`<b>${num(hatalar.length)}</b> oyun hatası kaydedildi (${new Set(hatalar.map(e => e.k)).size} cihazda); ayrıntı en altta.`);
   if (!S.E.length) ins.push('Bu dönemde henüz kayıt yok. Kayıt, oyunun yeni sürümü yayınlandıktan sonra başladı.');
 
   const shown = state.hepsi ? PL : PL.slice(0, 15);
@@ -498,6 +565,12 @@ function render() {
     ${bandRows.length ? table([['Kademe'], ['Başlanan', 'n'], ['Çözülen', 'n'], ['Bırakılan', 'n'], ['Ortanca süre', 'n'], ['Yardımsız', 'n'], ['Hızlı', 'n'], ['3 yıldız', 'n'], ['Cihaz', 'n']], bandRows) : '<p class="empty">Bu dönemde seviye oynanmadı.</p>'}
   </section>
 
+  <section class="card wide">
+    <h2>Bölüm bölüm</h2>
+    <p class="sub">Seviye modundaki her bölüm · süre: ortanca / hedef (hedefin 1,5 katını aşan kalın) · bırakan: çözmeden bırakan cihaz · hata: çözüm başına hatalı dokunuş</p>
+    ${bolumRows.length ? table([['Bölüm'], ['Başlayan', 'n'], ['Çözen', 'n'], ['Bırakan', 'n'], ['Süre', 'n'], ['Yardım', 'n'], ['Hata', 'n'], ['Yıldız', 'n'], ['Yardımsız', 'n']], bolumRows) : '<p class="empty">Bu dönemde seviye modunda bölüm oynanmadı.</p>'}
+  </section>
+
   <section class="grid g2">
     <div class="card"><h2>En çok zorlanılan seviyeler</h2><p class="sub">Yarıda bırakma, yardım ve hatalı dokunuşa göre</p>
       ${zor.length ? table([['Seviye'], ['Başlayan', 'n'], ['Çözen', 'n'], ['Bırakan', 'n'], ['Yardım', 'n'], ['Ortanca süre', 'n']], zor.map(x => [`${esc(x.id)} <span class="muted">${esc(BANT_AD[x.id.slice(0, 2)] || '')}</span>`, x.bas.size, x.coz, x.bir.size, x.yar, x.sn.length ? sure(med(x.sn)) : '–'])) : '<p class="empty">Bu dönemde zorlanılan seviye yok.</p>'}</div>
@@ -526,15 +599,25 @@ function render() {
   </section>
 
   <section class="grid g2">
+    <div class="card"><h2>Geri gelme</h2><p class="sub">İlk geldiği ${Y.haftalik ? 'haftaya' : 'güne'} göre yeni cihazlar · süresi dolmayanlar "…"</p>
+      ${Y.kohort.length ? table([[Y.haftalik ? 'Hafta' : 'İlk gün'], ['Yeni', 'n'], ['Ertesi gün', 'n'], ['7 gün içinde', 'n'], ['30 gün içinde', 'n']],
+        Y.kohort.map(c => [esc(fDayLong.format(dayMs(c.g))) + (Y.haftalik ? ' haftası' : ''), num(c.n), ...c.r.map(([a, b]) => b ? `${pct(a, b)} <span class="muted">${a}/${b}</span>` : '…')])) : '<p class="empty">Bu dönemde yeni cihaz yok.</p>'}</div>
+    <div class="card"><h2>Bırakanlar nerede kaldı?</h2><p class="sub">Bu dönemde oynayıp 7+ gündür gelmeyen ${num(gidenler.length)} cihazın son oynadığı bölüm</p>
+      ${kaldiRows.length ? table([['Son bölüm'], ['Cihaz', 'n'], ['Yarıda bırakarak', 'n']], kaldiRows) : '<p class="empty">Henüz 7 günü dolmuş bırakan yok.</p>'}</div>
+  </section>
+
+  <section class="grid g2">
     <div class="card"><h2>Cihaz ve ortam</h2><p class="sub">Cihaz başına son açılış</p>
       <div class="sub" style="margin:0 0 6px">Hangi adresten</div>${tbl2(siteM)}
       <div class="sub" style="margin:14px 0 6px">Nasıl açıldı</div>${tbl2(srcM)}
       <div class="sub" style="margin:14px 0 6px">İşletim sistemi</div>${tbl2(osM)}
-      <div class="sub" style="margin:14px 0 6px">Tarayıcı</div>${tbl2(brM)}</div>
+      <div class="sub" style="margin:14px 0 6px">Tarayıcı</div>${tbl2(brM)}
+      <div class="sub" style="margin:14px 0 6px">Telefon modeli <span class="muted">(Android: tarayıcı verirse gerçek model · iPhone: ekran boyutundan tahmin)</span></div>${tbl2(modelM, 12)}</div>
     <div class="card"><h2>Tercihler</h2><p class="sub">Cihaz başına son açılış</p>
       <div class="sub" style="margin:0 0 6px">Oyun dili</div>${tbl2(dilM)}
       <div class="sub" style="margin:14px 0 6px">Tema</div>${tbl2(temaM)}
-      <div class="sub" style="margin:14px 0 6px">Zorluk seçimi</div>${tbl2(otoM)}</div>
+      <div class="sub" style="margin:14px 0 6px">Zorluk seçimi</div>${tbl2(otoM)}
+      <div class="sub" style="margin:14px 0 6px">Oyun sürümü</div>${tbl2(surumM, 6)}</div>
   </section>
 
   <section class="grid g2">
@@ -546,10 +629,19 @@ function render() {
         ['Bırakma anı (ortanca)', S.bir.length ? sure(med(S.bir.map(e => e.sn || 0))) : '–'],
         ['Hatalı dokunuş (çözülen bulmaca başına)', S.cozum.length ? (S.cozum.reduce((a, e) => a + (e.hata || 0), 0) / S.cozum.length).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) : '–'],
         ['İlerlemeyi sıfırladı', num(S.T('sifirla').length)],
-      ])}</div>
+      ])}
+      <div class="sub" style="margin:14px 0 6px">Yardım bölümün neresinde istendi?</div>${yz.length ? hbars(dilimY.map(([l, v]) => ({ l, v }))) : '<p class="empty">Bu dönemde veri yok.</p>'}
+      <div class="sub" style="margin:14px 0 6px">Kademeye göre yardım</div>${tbl2(yardimKad)}
+      <p class="sub">İlk yardıma kadar geçen ortanca süre: <b>${ilkYardimMed == null ? '–' : sure(ilkYardimMed)}</b></p></div>
     <div class="card"><h2>Ekranlar ve ayarlar</h2><p class="sub">Açılan ekranlar ve değiştirilen ayarlar</p>
       <div class="sub" style="margin:0 0 6px">Ekran açılışı</div>${tbl2(ekrM)}
       <div class="sub" style="margin:14px 0 6px">Ayar değişikliği</div>${tbl2(ayarM, 10)}</div>
+  </section>
+
+  <section class="card wide">
+    <h2>Oyun hataları</h2>
+    <p class="sub">Oyuncunun telefonunda oluşan program hataları · aynı hata bir kez gruplanır</p>
+    ${hataRows.length ? table([['Hata'], ['Yer'], ['Sürüm'], ['Kez', 'n'], ['Cihaz', 'n']], hataRows) : '<p class="empty">Bu dönemde hata kaydı yok.</p>'}
   </section>
 
   <ul class="foot">
