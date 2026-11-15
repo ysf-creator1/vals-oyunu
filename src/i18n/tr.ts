@@ -43,6 +43,8 @@ export const tr = {
 
   'msg.deadEnd': 'Çıkmaz. Geri al.',
   'msg.distance': 'Bu taş aynı hizada tam {n} basamak uzakta değil.',
+  'msg.notStraight': 'Bu taş düz çizgide değil: sıçrama yalnız sağa, sola, yukarı ya da aşağı olur.',
+  'msg.distanceN': 'Bu taş {d} basamak uzakta, şimdi {n} basamak lazım.',
   'msg.visited': 'Bu taşa zaten bastın.',
   'msg.notPlainStart': 'Başlangıç yalnızca yuvarlak taş olabilir.',
   'msg.resetDone': 'Baştan başladın.',

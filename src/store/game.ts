@@ -7,7 +7,7 @@ import type { BandId, Level } from '../engine/types';
 import {
   acceptEasier, applyCampaignResult, continueTarget, manualNext, stayInTier, type AdaptiveEvents,
 } from '../progression/adaptive';
-import { levelId, stageOf, targetMs, tierOf, TUTORIAL_BEFORE, type Tier } from '../progression/bands';
+import { BAND_IDS, levelId, stageOf, targetMs, tierOf, TUTORIAL_BEFORE, type Tier } from '../progression/bands';
 import { dailyLevel, endlessLevel, titleOf, unlockedThemes, type Title } from '../progression/daily';
 import { defaultProfile, migrateProfile, totalSolved, type Profile, type Settings, type ThemeId } from '../progression/profile';
 import { classify, isFastBadge, starsFor, type Stars } from '../progression/stars';
@@ -161,8 +161,11 @@ export const useGame = create<State>((set, get) => {
 
     startCampaign: (band, index) => {
       const { profile, session } = get();
-      const tut = TUTORIAL_BEFORE[band];
-      if (tut && !profile.tutorialSeen.includes(tut)) return get().startTutorial([tut], { band, index });
+      // Every new shape up to this band, also when a fast player skipped the band that introduces it.
+      const need = BAND_IDS.slice(0, BAND_IDS.indexOf(band) + 1)
+        .map((x) => TUTORIAL_BEFORE[x])
+        .filter((x): x is string => !!x && !profile.tutorialSeen.includes(x));
+      if (need.length) return get().startTutorial(need, { band, index });
       const level = campaignLevel(band, index);
       if (session && !session.solved && session.level.id === level.id) return set({ screen: 'game', endCard: null });
       open(newSession('campaign', level, { pos: { band, index } }));

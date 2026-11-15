@@ -44,6 +44,8 @@ export const en: Record<StringKey, string> = {
 
   'msg.deadEnd': 'Dead end. Undo.',
   'msg.distance': 'That stone is not exactly {n} away in a straight line.',
+  'msg.notStraight': 'That stone is not in a straight line: jumps go only left, right, up or down.',
+  'msg.distanceN': 'That stone is {d} steps away; this jump needs {n}.',
   'msg.visited': 'You already stepped on that stone.',
   'msg.notPlainStart': 'Only a round stone can be the start.',
   'msg.resetDone': 'Started over.',

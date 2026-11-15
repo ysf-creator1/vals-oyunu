@@ -22,6 +22,8 @@ export interface BoardProps {
   finger?: number | null;
   /** Numbered step markers along a straight jump: shows why the target is the right distance. */
   count?: { from: number; to: number } | null;
+  /** Wrong tap in the first levels: dashed line from the current stone to the tapped one. */
+  miss?: { from: number; to: number; key: number } | null;
   /** Stones on a wrong branch (shown in the warning colour until undone). */
   wrong?: number[];
 }
@@ -218,6 +220,11 @@ function BoardImpl(p: BoardProps) {
         )}
       <g stroke="var(--b-grid)" strokeWidth="var(--b-grid-w)">{grid}</g>
       {ruler}
+      {p.miss && level.stones[p.miss.from] && level.stones[p.miss.to] && (
+        <line key={`m${p.miss.key}`} className="miss-line" x1={c(level.stones[p.miss.from][0])} y1={c(level.stones[p.miss.from][1])}
+          x2={c(level.stones[p.miss.to][0])} y2={c(level.stones[p.miss.to][1])}
+          stroke="var(--b-wrong)" strokeWidth={0.06} strokeDasharray="0.14 0.12" strokeLinecap="round" style={{ pointerEvents: 'none' }} />
+      )}
       <g>{arcs}</g>
       {level.stones.map(([x, y, kind], i) => {
         const vi = visitedAt.get(i);

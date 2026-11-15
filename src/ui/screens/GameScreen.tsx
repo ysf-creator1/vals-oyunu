@@ -30,6 +30,14 @@ function hintText(h: Hint, t: T): string {
 /** Tutorial levels where the finger always shows the next stone; elsewhere it appears after a pause. */
 const ALWAYS_FINGER = ['T1', 'T2', 'T3', 'T5', 'T6'];
 const IDLE_MS = 5000;
+/**
+ * The first campaign levels keep the tutorial's training wheels: glowing targets, the steps counted after each jump,
+ * a reason and a dashed line on a wrong tap, and the finger after a long pause or two wrong taps (free, no star cost).
+ */
+const EARLY_LEVELS = 3;
+const STUCK_MS = 15000;
+/** The very first campaign level: the finger leads the first moves, then lets go. */
+const LED_MOVES = 2;
 /** How long the extra-hard intro card stays: about the time it takes to read it. */
 const INTRO_MS = 9000;
 
@@ -61,6 +69,9 @@ export function GameScreen() {
   const introOpen = useRef(intro);
   introOpen.current = intro;
   const [idle, setIdle] = useState(false);
+  const [misses, setMisses] = useState(0);
+  const [lastJump, setLastJump] = useState<{ from: number; to: number; key: number } | null>(null);
+  const [miss, setMiss] = useState<{ from: number; to: number; key: number } | null>(null);
   const busy = useRef(false);
   const lastInput = useRef(Date.now());
   const [wrapRef, wrap] = useElementSize<HTMLDivElement>();
@@ -70,7 +81,10 @@ export function GameScreen() {
   const dead = isDeadEnd(level, path);
   const hidden = level.start === null && path.length === 0;
   const lastKind = path.length > 1 ? level.stones[path[path.length - 1]][2] : null;
-  const helperOn = settings.helper === 'on' || (settings.helper === 'auto' && (session.kind === 'tutorial' || level.band === 'K1'));
+  const tutorial = session.kind === 'tutorial';
+  const earlyIndex = session.kind === 'campaign' && level.band === 'K1' ? session.pos?.index ?? 99 : 99;
+  const early = tutorial || earlyIndex < EARLY_LEVELS;
+  const helperOn = settings.helper === 'on' || (settings.helper === 'auto' && (early || level.band === 'K1'));
 
   // Active-time clock: stops when hidden or after 60 s without input.
   useEffect(() => {
@@ -93,11 +107,21 @@ export function GameScreen() {
   }, [intro, g]);
 
   // The finger appears after a short pause where the player has to think (two choices, hidden start).
+  // In the first campaign levels the same finger comes after a longer pause (STUCK_MS).
   useEffect(() => {
     setIdle(false);
-    const id = setTimeout(() => setIdle(true), IDLE_MS);
+    setMisses(0);
+    setMiss(null);
+    const id = setTimeout(() => setIdle(true), tutorial ? IDLE_MS : STUCK_MS);
     return () => clearTimeout(id);
-  }, [path.length, level.id]);
+  }, [path.length, level.id, tutorial]);
+
+  // Early levels: count the steps of the jump just made (1, 2, 3 along the line), then fade.
+  useEffect(() => {
+    if (!lastJump) return;
+    const id = setTimeout(() => setLastJump(null), 1600);
+    return () => clearTimeout(id);
+  }, [lastJump]);
 
   useEffect(() => {
     if (dead) {
@@ -130,9 +154,16 @@ export function GameScreen() {
     playError();
     vibrate(40, settings.vibration);
     setShake({ stone, key: Date.now() });
+    setMisses((m) => m + 1);
     if (reason === 'distance') {
-      setRuler({ from: path[path.length - 1], len: rhythm.len, key: Date.now() });
-      setMsg({ text: t('msg.distance', { n: rhythm.len }) });
+      const from = path[path.length - 1];
+      const [ax, ay] = level.stones[from];
+      const [bx, by] = level.stones[stone];
+      const straight = ax === bx || ay === by;
+      const d = Math.abs(bx - ax) + Math.abs(by - ay);
+      setRuler({ from, len: rhythm.len, key: Date.now() });
+      if (early) setMiss({ from, to: stone, key: Date.now() });
+      setMsg({ text: !straight ? t('msg.notStraight') : d !== rhythm.len ? t('msg.distanceN', { d, n: rhythm.len }) : t('msg.distance', { n: rhythm.len }) });
     } else {
       setMsg({ text: t(reason === 'visited' ? 'msg.visited' : 'msg.notPlainStart') });
     }
@@ -147,7 +178,9 @@ export function GameScreen() {
     if (!r.ok) return fail(stone, r.reason);
     setMsg(null);
     setRuler(null);
+    setMiss(null);
     if ('undo' in r) return;
+    if (early && path.length > 0) setLastJump({ from: path[path.length - 1], to: stone, key: Date.now() });
     if (path.length > 0) playJump(before.len, before.dir);
     else playJump(1, 1);
     vibrate(8, settings.vibration);
@@ -243,10 +276,12 @@ export function GameScreen() {
   const boardSize = Math.max(200, Math.min(wrap.w, wrap.h));
   const hintTarget = session.hint && (session.hint.kind === 'next' || session.hint.kind === 'start') ? session.hint.target : null;
 
-  const tutorial = session.kind === 'tutorial';
-  const tutTarget = tutorial && !session.solved && onSolution(level, path) && path.length < level.solution.length ? level.solution[path.length] : null;
-  const finger = hintTarget ?? (tutTarget !== null && (ALWAYS_FINGER.includes(level.id) || idle) ? tutTarget : null);
-  const count = finger !== null && path.length > 0 && !session.solved ? { from: path[path.length - 1], to: finger } : null;
+  const guideTarget = early && !session.solved && onSolution(level, path) && path.length < level.solution.length ? level.solution[path.length] : null;
+  const led = tutorial ? ALWAYS_FINGER.includes(level.id) : earlyIndex === 0 && path.length <= LED_MOVES;
+  const finger = hintTarget ?? (guideTarget !== null && (led || idle || misses >= 2) ? guideTarget : null);
+  const count = finger !== null && path.length > 0 && !session.solved
+    ? { from: path[path.length - 1], to: finger }
+    : lastJump && path.length > 1 && path[path.length - 1] === lastJump.to ? { from: lastJump.from, to: lastJump.to } : null;
 
   // Tutorial coach (above the board, where the eyes are): the lesson, what to do now, and why.
   let coachNow: string | null = null;
@@ -308,6 +343,7 @@ export function GameScreen() {
             targets={helperOn && !session.solved ? legalMoves(level, path) : undefined}
             hintTarget={hintTarget}
             ruler={ruler}
+            miss={miss}
             shake={shake}
             replay={replay}
             showStartRing={level.start !== null}
