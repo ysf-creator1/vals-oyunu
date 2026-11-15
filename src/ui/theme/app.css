@@ -555,8 +555,8 @@ button {
 /* ---------- Levels ---------- */
 .tabs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
   background: var(--surface-2);
   padding: 4px;
   border-radius: 14px;
@@ -567,6 +567,9 @@ button {
   border-radius: 10px;
   background: transparent;
   font-weight: 700;
+  font-size: 0.9rem;
+  line-height: 1.15;
+  padding: 4px 2px;
   cursor: pointer;
 }
 .tabs button[aria-selected='true'] {
@@ -1048,3 +1051,57 @@ table.bands td:first-child {
   100% { opacity: 0; transform: translate(-50%, -4px); }
 }
 .rm .toast { animation: none; }
+
+/* Extra-hard intro: a short card over the board that closes itself (tap closes it sooner). */
+.intro-card {
+  position: fixed;
+  left: 50%;
+  top: 28%;
+  transform: translateX(-50%);
+  z-index: 55;
+  width: min(calc(100vw - 32px), 360px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 18px 18px;
+  border: 1.5px solid var(--accent);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  line-height: 1.4;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
+  overflow: hidden;
+  cursor: pointer;
+  animation: intro-life 9s ease forwards;
+}
+.intro-card b {
+  color: var(--accent);
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+.intro-card .help {
+  font-weight: 700;
+}
+.intro-card .life {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 4px;
+  width: 100%;
+  background: var(--accent);
+  transform-origin: left;
+  animation: intro-bar 9s linear forwards;
+}
+@keyframes intro-life {
+  0% { opacity: 0; transform: translate(-50%, 8px); }
+  4%, 94% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, 0); }
+}
+@keyframes intro-bar {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+.rm .intro-card { animation: none; }
+.rm .intro-card .life { animation: none; display: none; }

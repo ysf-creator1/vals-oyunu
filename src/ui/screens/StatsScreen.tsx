@@ -1,5 +1,5 @@
 import { formatTime, type StringKey } from '../../i18n';
-import { BAND_IDS, tierOf } from '../../progression/bands';
+import { BAND_IDS, stageOf, tierOf } from '../../progression/bands';
 import { titleOf } from '../../progression/daily';
 import { totalSolved } from '../../progression/profile';
 import { useGame } from '../../store/game';
@@ -34,7 +34,7 @@ export function StatsScreen() {
             <tbody>
               {rows.map((b) => (
                 <tr key={b}>
-                  <td>{t(`tier.${tierOf(b)}` as StringKey)} {b[1]}</td>
+                  <td>{t(`tier.${tierOf(b)}` as StringKey)} {stageOf(b)}</td>
                   <td>{p.stats.solved[b]}</td>
                   <td>{Math.round((p.stats.noHint[b] / p.stats.solved[b]) * 100)}%</td>
                   <td>{formatTime(p.stats.totalMs[b] / p.stats.solved[b])}</td>

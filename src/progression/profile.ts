@@ -49,6 +49,8 @@ export interface Profile {
   recent: RecentEntry[];
   easierOfferCooldown: number;
   tutorialSeen: string[];
+  /** The short "extra hard: find the start too" card has been shown. */
+  extraIntroSeen: boolean;
   daily: DailyState;
   themesUnlocked: ThemeId[];
   stats: Stats;
@@ -78,6 +80,7 @@ export const defaultProfile = (): Profile => ({
   recent: [],
   easierOfferCooldown: 0,
   tutorialSeen: [],
+  extraIntroSeen: false,
   daily: { lastSolved: null, streak: 0, best: 0, freezeUsedWeek: null },
   themesUnlocked: ['classic'],
   stats: { solved: zero(), noHint: zero(), totalMs: zero() },

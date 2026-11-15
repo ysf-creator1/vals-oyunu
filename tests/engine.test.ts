@@ -73,18 +73,15 @@ describe('rules API', () => {
 
 describe('hints', () => {
   const F1 = lvl([[2, 3, 'P'], [3, 3, 'P'], [1, 3, 'P'], [3, 0, 'P'], [1, 1, 'P'], [3, 1, 'P']], 0, [0, 2, 1, 3, 5, 4], 4);
-  it('tiers on the right path', () => {
-    expect(hint(F1, [0], 1).kind).toBe('onTrack');
-    expect(hint(F1, [0], 2)).toMatchObject({ kind: 'direction', len: 1, dir: 'left', target: 2 });
-    expect(hint(F1, [0], 3)).toMatchObject({ kind: 'mark', target: 2 });
+  it('the first press already names the next stone', () => {
+    expect(hint(F1, [0])).toEqual({ kind: 'next', len: 1, dir: 'left', target: 2, note: null });
+    expect(hint(F1, [0, 2])).toMatchObject({ kind: 'next', len: 2, dir: 'right', target: 1 });
   });
   it('wrong path names the first bad move', () => {
     expect(hint(F1, [0, 1])).toEqual({ kind: 'wrong', move: 1, rewindTo: [0] });
   });
-  it('hidden start region then mark', () => {
-    const t7 = TUTORIAL[6];
-    expect(hint(t7, [], 1)).toMatchObject({ kind: 'startRegion', region: 'bottom' });
-    expect(hint(t7, [], 2)).toMatchObject({ kind: 'startMark', target: 0 });
+  it('hidden start: the start stone right away', () => {
+    expect(hint(TUTORIAL[6], [])).toEqual({ kind: 'start', target: 0 });
   });
 });
 

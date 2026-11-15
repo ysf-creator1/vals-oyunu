@@ -7,7 +7,7 @@ import type { BandId, Level } from '../engine/types';
 import {
   acceptEasier, applyCampaignResult, continueTarget, manualNext, stayInTier, type AdaptiveEvents,
 } from '../progression/adaptive';
-import { levelId, targetMs, tierOf, TUTORIAL_BEFORE, type Tier } from '../progression/bands';
+import { levelId, stageOf, targetMs, tierOf, TUTORIAL_BEFORE, type Tier } from '../progression/bands';
 import { dailyLevel, endlessLevel, titleOf, unlockedThemes, type Title } from '../progression/daily';
 import { defaultProfile, migrateProfile, type Profile, type Settings, type ThemeId } from '../progression/profile';
 import { classify, isFastBadge, starsFor, type Stars } from '../progression/stars';
@@ -35,7 +35,7 @@ export interface Session {
   elapsedMs: number;
   hintSteps: number[];
   wrongCount: number;
-  hintTier: number;
+  /** Path for which the current hint was given (pressing Help again there costs nothing). */
   hintKey: string;
   hint: Hint | null;
   solved: boolean;
@@ -92,7 +92,7 @@ const pathKey = (p: number[]) => p.join(',');
 function newSession(kind: Session['kind'], level: Level, extra: Partial<Session> = {}): Session {
   return {
     kind, level, path: initialPath(level), redo: null, elapsedMs: 0, hintSteps: [], wrongCount: 0,
-    hintTier: 0, hintKey: '', hint: null, solved: false, nonce: Date.now() + Math.random(), ...extra,
+    hintKey: '', hint: null, solved: false, nonce: Date.now() + Math.random(), ...extra,
   };
 }
 
@@ -187,15 +187,13 @@ export const useGame = create<State>((set, get) => {
       const s = get().session;
       if (!s || s.solved) return null;
       const key = pathKey(s.path);
-      const maxTier = s.path.length === 0 ? 2 : 3;
-      const tier = s.hintKey === key ? Math.min(s.hintTier + 1, maxTier) : 1;
-      const h = computeHint(s.level, s.path, tier);
+      const h = computeHint(s.level, s.path);
       let { hintSteps, wrongCount } = s;
-      if (h.kind === 'wrong' && tier === 1) wrongCount += 1;
-      if ((h.kind === 'direction' || h.kind === 'mark' || h.kind === 'startMark') && !hintSteps.includes(s.path.length)) {
-        hintSteps = [...hintSteps, s.path.length];
+      if (s.hintKey !== key) {
+        if (h.kind === 'wrong') wrongCount += 1;
+        if ((h.kind === 'next' || h.kind === 'start') && !hintSteps.includes(s.path.length)) hintSteps = [...hintSteps, s.path.length];
       }
-      set({ session: { ...s, hintTier: tier, hintKey: key, hint: h, hintSteps, wrongCount } });
+      set({ session: { ...s, hintKey: key, hint: h, hintSteps, wrongCount } });
       return h;
     },
 
@@ -306,14 +304,14 @@ export const useGame = create<State>((set, get) => {
 
 useGame.subscribe((st) => save({ profile: st.profile, session: st.session }));
 
-/** Label like "Orta · 37" for the top bar (number within the tier: 4 bands × 40). */
+/** Label like "Zor 2 · 5" for the top bar: tier, stage inside the tier, level number inside the stage. */
 export function sessionLabel(s: Session, t: T): string {
   if (s.kind === 'tutorial') return `${t('game.tutorial')} · ${s.level.id.slice(1)}`;
   const band = s.level.band as BandId;
   const tierName = t(`tier.${tierOf(band)}` as StringKey);
   if (s.kind === 'daily') return `${t('game.daily')} · ${tierName}`;
   if (s.kind === 'endless') return `${t('game.endless')} · ${tierName}`;
-  return t('game.label', { tier: tierName, stage: band[1], n: (s.pos?.index ?? 0) + 1 });
+  return t('game.label', { tier: tierName, stage: stageOf(band), n: (s.pos?.index ?? 0) + 1 });
 }
 
 export const rhythmOf = (s: Session) => rhythmAfter(s.level, s.path);

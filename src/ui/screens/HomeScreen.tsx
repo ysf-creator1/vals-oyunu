@@ -1,6 +1,6 @@
 import type { StringKey } from '../../i18n';
 import { continueTarget } from '../../progression/adaptive';
-import { tierOf } from '../../progression/bands';
+import { stageOf, tierOf } from '../../progression/bands';
 import { titleOf } from '../../progression/daily';
 import { currentStreak, dateKey } from '../../progression/streak';
 import { useState } from 'react';
@@ -29,7 +29,7 @@ export function HomeScreen() {
   const streak = currentStreak(profile.daily, today);
   const resuming = session && !session.solved;
   const c = continueTarget(profile);
-  const nextLabel = t('game.label', { tier: t(`tier.${tierOf(c.band)}` as StringKey), stage: c.band[1], n: c.index + 1 });
+  const nextLabel = t('game.label', { tier: t(`tier.${tierOf(c.band)}` as StringKey), stage: stageOf(c.band), n: c.index + 1 });
   const [guide, setGuide] = useState(false);
 
   return (

@@ -3,6 +3,7 @@ import { playError, playJump, playMelody, unlockAudio, vibrate } from '../../aud
 import type { Hint } from '../../engine/hint';
 import { isDeadEnd, legalMoves, rhythmAfter } from '../../engine/rules';
 import { formatTime, type T } from '../../i18n';
+import { tierOf } from '../../progression/bands';
 import { sessionLabel, useGame } from '../../store/game';
 import { Board } from '../board/Board';
 import { Rhythm } from '../board/Rhythm';
@@ -16,18 +17,12 @@ type Msg = { text: string; action?: { label: string; fn: () => void } } | null;
 function hintText(h: Hint, t: T): string {
   const note = 'note' in h && h.note ? ' ' + t(h.note === 'reversed' ? 'hint.noteReversed' : 'hint.noteHold') : '';
   switch (h.kind) {
-    case 'onTrack':
-      return t('hint.onTrack') + note;
-    case 'direction':
-      return t('hint.direction', { n: h.len, dir: t(`dir.${h.dir}`) }) + note;
-    case 'mark':
-      return t('hint.mark') + note;
+    case 'next':
+      return t('hint.next', { n: h.len, dir: t(`dir.${h.dir}`) }) + note;
     case 'wrong':
-      return h.move === 0 ? t('hint.wrongStart') : t('hint.wrong', { n: h.move });
-    case 'startRegion':
-      return t(h.region === 'top' ? 'hint.startTop' : 'hint.startBottom');
-    case 'startMark':
-      return t('hint.startMark');
+      return h.move === 0 ? t('hint.wrongStart') : t('hint.wrong');
+    case 'start':
+      return t('hint.start');
     default:
       return '';
   }
@@ -36,6 +31,8 @@ function hintText(h: Hint, t: T): string {
 /** Tutorial levels where the finger always shows the next stone; elsewhere it appears after a pause. */
 const ALWAYS_FINGER = ['T1', 'T2', 'T3', 'T5', 'T6'];
 const IDLE_MS = 5000;
+/** How long the extra-hard intro card stays: about the time it takes to read it. */
+const INTRO_MS = 9000;
 
 const DIRS: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
 
@@ -58,6 +55,12 @@ export function GameScreen() {
   const [guide, setGuide] = useState(false);
   const guideOpen = useRef(false);
   guideOpen.current = guide;
+  // First extra-hard level: a short card that says the start must be found too, then closes itself.
+  const [intro, setIntro] = useState(
+    () => session.level.band !== 'T' && tierOf(session.level.band) === 'extra' && !g().profile.extraIntroSeen,
+  );
+  const introOpen = useRef(intro);
+  introOpen.current = intro;
   const [idle, setIdle] = useState(false);
   const busy = useRef(false);
   const lastInput = useRef(Date.now());
@@ -77,11 +80,18 @@ export function GameScreen() {
       const now = performance.now();
       const dt = now - prev;
       prev = now;
-      if (document.visibilityState !== 'visible' || guideOpen.current || Date.now() - lastInput.current > 60_000) return;
+      if (document.visibilityState !== 'visible' || guideOpen.current || introOpen.current || Date.now() - lastInput.current > 60_000) return;
       if (!g().session?.solved) g().addElapsed(Math.min(dt, 2000));
     }, 1000);
     return () => clearInterval(id);
   }, [g]);
+
+  useEffect(() => {
+    if (!intro) return;
+    g().updateProfile((p) => ({ ...p, extraIntroSeen: true }));
+    const id = setTimeout(() => setIntro(false), INTRO_MS);
+    return () => clearTimeout(id);
+  }, [intro, g]);
 
   // The finger appears after a short pause where the player has to think (two choices, hidden start).
   useEffect(() => {
@@ -171,7 +181,13 @@ export function GameScreen() {
     if (!h) return;
     if (h.kind === 'wrong') {
       setWrongMark({ at: h.move, stone: g().session!.path[h.move] });
-      setMsg({ text: hintText(h, t), action: { label: t('hint.rewind'), fn: () => { g().rewindTo(h.rewindTo); setMsg(null); } } });
+      // Rewinding also shows the right next stone, so one tap gets the player going again.
+      const fix = () => {
+        g().rewindTo(h.rewindTo);
+        const n = g().help();
+        setMsg(n ? { text: hintText(n, t) } : null);
+      };
+      setMsg({ text: hintText(h, t), action: { label: t('hint.rewind'), fn: fix } });
     } else setMsg({ text: hintText(h, t) });
   };
 
@@ -226,7 +242,7 @@ export function GameScreen() {
   const wrongStones = wrongMark && path[wrongMark.at] === wrongMark.stone ? path.slice(wrongMark.at) : [];
 
   const boardSize = Math.max(200, Math.min(wrap.w, wrap.h));
-  const hintTarget = session.hint && (session.hint.kind === 'mark' || session.hint.kind === 'startMark') ? session.hint.target : null;
+  const hintTarget = session.hint && (session.hint.kind === 'next' || session.hint.kind === 'start') ? session.hint.target : null;
 
   const tutorial = session.kind === 'tutorial';
   const tutTarget = tutorial && !session.solved && onSolution(level, path) && path.length < level.solution.length ? level.solution[path.length] : null;
@@ -335,6 +351,14 @@ export function GameScreen() {
       </div>
       {showCard && endCard && <EndCardSheet card={endCard} />}
       {guide && <GuideSheet onClose={() => setGuide(false)} />}
+      {intro && (
+        <button className="intro-card" onClick={() => setIntro(false)} role="status" aria-live="polite" style={{ animationDuration: `${INTRO_MS}ms` }}>
+          <b>✦ {t('intro.extra.title')}</b>
+          <span>{t('intro.extra.body')}</span>
+          <span className="help">{t('intro.extra.help')}</span>
+          <i className="life" aria-hidden="true" style={{ animationDuration: `${INTRO_MS}ms` }} />
+        </button>
+      )}
     </div>
   );
 }

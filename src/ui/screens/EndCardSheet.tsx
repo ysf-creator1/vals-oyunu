@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { BandId } from '../../engine/types';
 import { formatTime, type StringKey, type T } from '../../i18n';
-import { tierOf } from '../../progression/bands';
+import { bandIndex, stageOf, tierOf } from '../../progression/bands';
 import type { Profile } from '../../progression/profile';
 import { currentStreak, dateKey } from '../../progression/streak';
 import { useGame, type EndCard } from '../../store/game';
@@ -48,8 +48,8 @@ export function EndCardSheet({ card }: { card: EndCard }) {
   useEffect(() => {
     const p = card.events.promoted;
     if (!p || card.events.tierUp) return;
-    const jumped = Number(p.to[1]) - Number(p.from[1]) > 1;
-    toast(t(jumped ? 'toast.bandJump' : 'toast.bandUp', { tier: t(`tier.${tierOf(p.to)}` as StringKey), stage: p.to[1] }));
+    const jumped = bandIndex(p.to) - bandIndex(p.from) > 1;
+    toast(t(jumped ? 'toast.bandJump' : 'toast.bandUp', { tier: t(`tier.${tierOf(p.to)}` as StringKey), stage: stageOf(p.to) }));
   }, [card]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tierName = (tier: string) => t(`tier.${tier}` as StringKey);

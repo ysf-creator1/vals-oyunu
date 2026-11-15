@@ -1,15 +1,18 @@
 import type { BandId } from '../engine/types';
-import { BAND_IDS, bandIndex, bandsOfTier, LEVELS_PER_BAND, levelId, targetMs, tierOf, type Tier } from './bands';
+import { BAND_IDS, bandIndex, bandsOfTier, LEVELS_PER_BAND, levelId, NO_SKIP_TIERS, targetMs, tierOf, type Tier } from './bands';
 import type { Profile, RecentEntry } from './profile';
 
 export interface AdaptiveEvents {
   promoted?: { from: BandId; to: BandId };
-  /** Set when the promotion crossed a tier boundary (K4→O1, O4→Z1). */
+  /** Set when the promotion crossed a tier boundary (K4→O1, O2→O3, O4→Z1). */
   tierUp?: { from: Tier; to: Tier };
   offerEasier?: boolean;
 }
 
-const lastOfTier = (t: Tier) => bandsOfTier(t)[3];
+const lastOfTier = (t: Tier) => {
+  const bs = bandsOfTier(t);
+  return bs[bs.length - 1];
+};
 
 export const isBandComplete = (p: Profile, band: BandId) => {
   for (let i = 0; i < LEVELS_PER_BAND; i++) if (!p.results[levelId(band, i)]) return false;
@@ -39,9 +42,11 @@ export function applyCampaignResult(profile: Profile, entry: RecentEntry): { pro
   const veryFast = last3.length === 3 && last3.every((r) => r.cls === 'fast' && r.ms < targetMs(r.band) / 2);
   const fastCount = last3.filter((r) => r.cls === 'fast').length;
 
+  // In medium and hard, speed never skips levels: the band is played through, then the next one opens.
+  const canSkip = !NO_SKIP_TIERS.includes(tierOf(p.currentBand));
   let target: BandId = p.currentBand;
-  if (veryFast) target = promoteTarget(p.currentBand, 2);
-  else if ((last3.length === 3 && fastCount >= 2) || isBandComplete(p, p.currentBand)) target = promoteTarget(p.currentBand, 1);
+  if (canSkip && veryFast) target = promoteTarget(p.currentBand, 2);
+  else if ((canSkip && last3.length === 3 && fastCount >= 2) || isBandComplete(p, p.currentBand)) target = promoteTarget(p.currentBand, 1);
 
   if (target !== p.currentBand) {
     const fromTier = tierOf(p.currentBand);

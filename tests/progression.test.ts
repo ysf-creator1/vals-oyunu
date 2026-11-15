@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { acceptEasier, applyCampaignResult, continueTarget, selectBandManually, stayInTier } from '../src/progression/adaptive';
-import { levelId, targetMs } from '../src/progression/bands';
+import { levelId, stageOf, targetMs, tierOf } from '../src/progression/bands';
 import type { BandId } from '../src/engine/types';
 import { defaultProfile, type Profile, type RecentEntry } from '../src/progression/profile';
 import { classify, starsFor } from '../src/progression/stars';
@@ -48,6 +48,30 @@ describe('auto difficulty', () => {
     const r = play(p, vf('K4'), vf('K4'), vf('K4'));
     expect(r.p.currentBand).toBe('O1'); // the tier boundary is crossed in one step
     expect(r.evs[2].tierUp).toEqual({ from: 'easy', to: 'medium' });
+  });
+  it('medium and hard never skip on speed; a finished band opens the next', () => {
+    const vf = (b: BandId) => entry(b, 'fast', targetMs(b) * 0.3);
+    for (const band of ['O1', 'O2', 'O3', 'O4'] as BandId[]) {
+      const r = play({ ...defaultProfile(), currentBand: band }, vf(band), vf(band), vf(band), vf(band));
+      expect(r.p.currentBand).toBe(band);
+    }
+    const p = { ...defaultProfile(), currentBand: 'O2' as BandId };
+    for (let i = 0; i < 40; i++) p.results[levelId('O2', i)] = { stars: 3, bestMs: 1, fast: false };
+    const r = play(p, entry('O2', 'normal'));
+    expect(r.p.currentBand).toBe('O3');
+    expect(r.evs[0].tierUp).toEqual({ from: 'medium', to: 'hard' });
+  });
+  it('O4 → Z1 is the step into extra hard; Z keeps speed promotion', () => {
+    const p = { ...defaultProfile(), currentBand: 'O4' as BandId };
+    for (let i = 0; i < 40; i++) p.results[levelId('O4', i)] = { stars: 3, bestMs: 1, fast: false };
+    expect(play(p, entry('O4', 'normal')).evs[0].tierUp).toEqual({ from: 'hard', to: 'extra' });
+    const z = play({ ...defaultProfile(), currentBand: 'Z1' }, entry('Z1', 'fast'), entry('Z1', 'fast'), entry('Z1', 'normal'));
+    expect(z.p.currentBand).toBe('Z2');
+  });
+  it('stages are numbered inside each tier', () => {
+    expect(['K4', 'O1', 'O2', 'O3', 'O4', 'Z1', 'Z4'].map((b) => `${tierOf(b as BandId)} ${stageOf(b as BandId)}`)).toEqual([
+      'easy 4', 'medium 1', 'medium 2', 'hard 1', 'hard 2', 'extra 1', 'extra 4',
+    ]);
   });
   it('2 struggled in a row → offer once; declined → not again for 5 levels', () => {
     let p: Profile = { ...defaultProfile(), currentBand: 'K3' };
