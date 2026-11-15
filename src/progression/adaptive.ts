@@ -1,5 +1,5 @@
 import type { BandId } from '../engine/types';
-import { BAND_IDS, bandIndex, bandsOfTier, LEVELS_PER_BAND, levelId, NO_SKIP_TIERS, targetMs, tierOf, type Tier } from './bands';
+import { BAND_IDS, bandIndex, bandsOfTier, LEVELS_PER_BAND, levelId, PROMOTION, targetMs, tierOf, type Tier } from './bands';
 import type { Profile, RecentEntry } from './profile';
 
 export interface AdaptiveEvents {
@@ -12,6 +12,12 @@ export interface AdaptiveEvents {
 const lastOfTier = (t: Tier) => {
   const bs = bandsOfTier(t);
   return bs[bs.length - 1];
+};
+
+const solvedInBand = (p: Profile, band: BandId) => {
+  let n = 0;
+  for (let i = 0; i < LEVELS_PER_BAND; i++) if (p.results[levelId(band, i)]) n++;
+  return n;
 };
 
 export const isBandComplete = (p: Profile, band: BandId) => {
@@ -38,15 +44,16 @@ export function applyCampaignResult(profile: Profile, entry: RecentEntry): { pro
   if (entry.band !== p.currentBand || p.mode !== 'auto') return { profile: p, events };
 
   const inBand = p.recent.filter((r) => r.band === p.currentBand);
+  const rule = PROMOTION[tierOf(p.currentBand)];
   const last3 = inBand.slice(-3);
   const veryFast = last3.length === 3 && last3.every((r) => r.cls === 'fast' && r.ms < targetMs(r.band) / 2);
-  const fastCount = last3.filter((r) => r.cls === 'fast').length;
+  const recent = inBand.slice(-rule.window);
+  const fastEnough = recent.length === rule.window && recent.filter((r) => r.cls === 'fast').length >= rule.fastNeeded;
+  const playedEnough = solvedInBand(p, p.currentBand) >= rule.minPlayed;
 
-  // In medium and hard, speed never skips levels: the band is played through, then the next one opens.
-  const canSkip = !NO_SKIP_TIERS.includes(tierOf(p.currentBand));
   let target: BandId = p.currentBand;
-  if (canSkip && veryFast) target = promoteTarget(p.currentBand, 2);
-  else if ((canSkip && last3.length === 3 && fastCount >= 2) || isBandComplete(p, p.currentBand)) target = promoteTarget(p.currentBand, 1);
+  if (rule.allowDouble && veryFast) target = promoteTarget(p.currentBand, 2);
+  else if ((playedEnough && fastEnough) || isBandComplete(p, p.currentBand)) target = promoteTarget(p.currentBand, 1);
 
   if (target !== p.currentBand) {
     const fromTier = tierOf(p.currentBand);

@@ -49,17 +49,30 @@ describe('auto difficulty', () => {
     expect(r.p.currentBand).toBe('O1'); // the tier boundary is crossed in one step
     expect(r.evs[2].tierUp).toEqual({ from: 'easy', to: 'medium' });
   });
-  it('medium and hard never skip on speed; a finished band opens the next', () => {
+  it('medium and hard: a fast player moves up one band, but only after 10 levels and 4 of the last 5 fast', () => {
     const vf = (b: BandId) => entry(b, 'fast', targetMs(b) * 0.3);
+    const solved = (p: Profile, band: BandId, n: number) => {
+      for (let i = 0; i < n; i++) p.results[levelId(band, i)] = { stars: 3, bestMs: 1, fast: true };
+      return p;
+    };
     for (const band of ['O1', 'O2', 'O3', 'O4'] as BandId[]) {
-      const r = play({ ...defaultProfile(), currentBand: band }, vf(band), vf(band), vf(band), vf(band));
-      expect(r.p.currentBand).toBe(band);
+      // very fast but fewer than 10 levels played: stays
+      const early = play(solved({ ...defaultProfile(), results: {}, currentBand: band }, band, 5), ...Array(5).fill(vf(band)));
+      expect(early.p.currentBand).toBe(band);
     }
-    const p = { ...defaultProfile(), currentBand: 'O2' as BandId };
-    for (let i = 0; i < 40; i++) p.results[levelId('O2', i)] = { stars: 3, bestMs: 1, fast: false };
-    const r = play(p, entry('O2', 'normal'));
-    expect(r.p.currentBand).toBe('O3');
-    expect(r.evs[0].tierUp).toEqual({ from: 'medium', to: 'hard' });
+    // 10 played, 4 of the last 5 fast → one band, never two
+    const p = solved({ ...defaultProfile(), results: {}, currentBand: 'O3' }, 'O3', 10);
+    const r = play(p, vf('O3'), vf('O3'), entry('O3', 'normal'), vf('O3'), vf('O3'));
+    expect(r.p.currentBand).toBe('O4');
+    // only 3 of the last 5 fast → stays
+    const q = solved({ ...defaultProfile(), results: {}, currentBand: 'O1' }, 'O1', 12);
+    const s3 = play(q, vf('O1'), entry('O1', 'normal'), vf('O1'), entry('O1', 'normal'), vf('O1'));
+    expect(s3.p.currentBand).toBe('O1');
+    // a finished band always opens the next one
+    const done = solved({ ...defaultProfile(), results: {}, currentBand: 'O2' }, 'O2', 40);
+    const d = play(done, entry('O2', 'normal'));
+    expect(d.p.currentBand).toBe('O3');
+    expect(d.evs[0].tierUp).toEqual({ from: 'medium', to: 'hard' });
   });
   it('O4 → Z1 is the step into extra hard; Z keeps speed promotion', () => {
     const p = { ...defaultProfile(), currentBand: 'O4' as BandId };

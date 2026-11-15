@@ -35,8 +35,24 @@ export const BANDS: BandInfo[] = [
 export const BAND_IDS: BandId[] = BANDS.map((x) => x.id);
 export const LEVELS_PER_BAND = 40;
 export const TIERS: Tier[] = ['easy', 'medium', 'hard', 'extra'];
-/** Tiers where auto mode never skips ahead on speed: the player moves on when a band's levels are done. */
-export const NO_SKIP_TIERS: Tier[] = ['medium', 'hard'];
+/**
+ * When auto mode moves a fast player up before the band is finished.
+ * Easy and extra hard: 2 of the last 3 fast → next band; 3 very fast in a row → two bands.
+ * Medium and hard hold most of the game, so a fast player first plays `minPlayed` levels of the band
+ * and needs 4 of the last 5 fast, and moves only one band at a time. Everyone else plays the band through.
+ */
+export interface PromotionRule {
+  minPlayed: number;
+  window: number;
+  fastNeeded: number;
+  allowDouble: boolean;
+}
+export const PROMOTION: Record<Tier, PromotionRule> = {
+  easy: { minPlayed: 0, window: 3, fastNeeded: 2, allowDouble: true },
+  medium: { minPlayed: 10, window: 5, fastNeeded: 4, allowDouble: false },
+  hard: { minPlayed: 10, window: 5, fastNeeded: 4, allowDouble: false },
+  extra: { minPlayed: 0, window: 3, fastNeeded: 2, allowDouble: true },
+};
 
 export const bandInfo = (id: BandId): BandInfo => BANDS.find((x) => x.id === id)!;
 export const bandIndex = (id: BandId): number => BAND_IDS.indexOf(id);
