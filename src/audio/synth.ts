@@ -75,6 +75,15 @@ export function playMelody(notes: { len: number; dir: number }[], stepMs: number
   return notes.length * stepMs + 600;
 }
 
+/** A rising fanfare with a few crackles, for beating everyone's best time. */
+export function playFanfare() {
+  if (!enabled || !ctx) return;
+  const t0 = ctx.currentTime + 0.05;
+  [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(f, t0 + i * 0.11, 0.3, 'triangle', 0.4));
+  [1046.5, 1318.5, 1568].forEach((f) => tone(f, t0 + 0.5, 1.2, 'sine', 0.2));
+  for (let i = 0; i < 10; i++) tone(2000 + Math.random() * 2500, t0 + 0.4 + i * 0.14 + Math.random() * 0.08, 0.05, 'square', 0.04, 6000);
+}
+
 export function vibrate(pattern: number | number[], on: boolean) {
   if (!on) return;
   try {

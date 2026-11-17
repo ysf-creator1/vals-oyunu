@@ -555,6 +555,35 @@ button {
   gap: 10px;
 }
 
+.sheet .others {
+  text-align: center;
+  font-size: 0.9rem;
+  animation: fadein 0.3s ease;
+}
+.sheet .others b {
+  font-variant-numeric: tabular-nums;
+}
+.note.win {
+  background: linear-gradient(135deg, #ffe8a3, #ffd166);
+  color: #3a2a00;
+  font-size: 1.02rem;
+  animation: pop 0.45s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+@keyframes pop {
+  from { transform: scale(0.7); opacity: 0; }
+}
+.rm .note.win {
+  animation: none;
+}
+.fireworks {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 30;
+}
+
 /* ---------- Levels ---------- */
 .tabs {
   display: grid;

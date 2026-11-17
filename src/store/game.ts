@@ -14,6 +14,7 @@ import { classify, isFastBadge, starsFor, type Stars } from '../progression/star
 import { dateKey, recordDailySolve } from '../progression/streak';
 import type { StringKey, T } from '../i18n';
 import { deviceInfo, deviceModel, flush as flushEvents, isFirstVisit, track, VERSION } from '../analytics/track';
+import { fetchOthersTimes, type OthersTimes } from '../analytics/times';
 import { clearSaved, loadSaved, save } from './persist';
 
 const LEVELS = levelsJson as unknown as Level[];
@@ -50,6 +51,10 @@ export interface EndCard {
   stars: Stars;
   ms: number;
   fast: boolean;
+  /** Solved with help (hint or wrong-path marks): never counts as the fastest. */
+  helped: boolean;
+  /** Other players' times for this level: undefined while loading, null when unavailable. */
+  others?: OthersTimes | null;
   events: AdaptiveEvents;
   newTitle?: Title;
   newThemes: ThemeId[];
@@ -293,7 +298,7 @@ export const useGame = create<State>((set, get) => {
       const titleAfter = titleOf(p);
       set({ profile: p });
       track('bitti', {
-        ...lv(s), sn: Math.round(ms / 1000), yildiz: stars, ipucu: hints, yanlis: s.wrongCount, hata: s.misses ?? 0,
+        ...lv(s), sn: Math.round(ms / 1000), ms: Math.round(ms), yildiz: stars, ipucu: hints, yanlis: s.wrongCount, hata: s.misses ?? 0,
         hizli: fast, ilk: s.kind === 'campaign' ? firstSolve : undefined,
         son: s.kind === 'tutorial' ? tutorialFinished : undefined,
         yukseldi: events.promoted ? `${events.promoted.from}>${events.promoted.to}` : undefined,
@@ -322,11 +327,17 @@ export const useGame = create<State>((set, get) => {
       };
 
       const card: EndCard = {
-        stars, ms, fast, events, kind: s.kind, tutorialFinished, next,
+        stars, ms, fast, helped: hints > 0, events, kind: s.kind, tutorialFinished, next,
         newTitle: titleAfter !== titleBefore ? titleAfter : undefined,
         newThemes: themes.filter((t) => !themesBefore.includes(t)),
       };
       set({ endCard: card });
+      if (band) {
+        void fetchOthersTimes(s.level.id, band, s.kind === 'endless').then((others) => {
+          const c = get().endCard;
+          if (c && c.next === next) set({ endCard: { ...c, others } });
+        });
+      }
       return card;
     },
 

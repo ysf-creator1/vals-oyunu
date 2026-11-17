@@ -1,12 +1,15 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { compareSolve } from '../../analytics/times';
+import { playFanfare, vibrate } from '../../audio/synth';
 import type { BandId } from '../../engine/types';
 import { formatTime, type StringKey, type T } from '../../i18n';
 import { bandIndex, stageOf, tierOf } from '../../progression/bands';
 import type { Profile } from '../../progression/profile';
 import { currentStreak, dateKey } from '../../progression/streak';
 import { useGame, type EndCard } from '../../store/game';
+import { Fireworks } from '../components/Fireworks';
 import { toast } from '../components/Toast';
-import { useT } from '../hooks';
+import { useReducedMotion, useT } from '../hooks';
 
 export function shareText(p: Profile, t: T, now = new Date()): string | null {
   const r = p.daily.lastResult;
@@ -55,6 +58,28 @@ export function EndCardSheet({ card }: { card: EndCard }) {
   const tierName = (tier: string) => t(`tier.${tier}` as StringKey);
   const tutorial = card.kind === 'tutorial';
 
+  // Comparison with other players (only with the timer on: someone who hid the clock does not want time pressure).
+  const others = showTimer && !tutorial ? card.others : null;
+  const verdict = compareSolve(card.ms, card.helped, others ?? null);
+  const reducedMotion = useReducedMotion();
+  const [party, setParty] = useState(false);
+  useEffect(() => {
+    if (verdict !== 'fastest') return;
+    playFanfare();
+    vibrate([60, 40, 60, 40, 120], profile.settings.vibration);
+    if (!reducedMotion) setParty(true);
+  }, [verdict]); // eslint-disable-line react-hooks/exhaustive-deps
+  const othersLine = (() => {
+    if (!others || others.n === 0 || others.avg === null) return null;
+    if (others.scope === 'band') return t('end.othersBand', { t: formatTime(others.avg) });
+    const parts = [
+      others.best !== null ? t('end.othersBest', { t: formatTime(others.best) }) : null,
+      t('end.othersAvg', { t: formatTime(others.avg) }),
+      t('end.othersN', { n: others.n }),
+    ].filter(Boolean);
+    return parts.join(' · ');
+  })();
+
   const doShare = async () => {
     const text = shareText(profile, t);
     if (!text) return;
@@ -80,6 +105,16 @@ export function EndCardSheet({ card }: { card: EndCard }) {
             {card.fast && <span className="badge">⚡ {t('end.fast')}</span>}
           </div>
         )}
+        {othersLine && (
+          <div className="others">
+            <span className="muted">{t('end.othersTitle')}: </span>
+            <b>{othersLine}</b>
+          </div>
+        )}
+        {verdict === 'fastest' && <div className="note win" role="status">🏆 {t('end.fastest')}</div>}
+        {verdict === 'leading' && <div className="note" role="status">🏆 {t('end.leading')}</div>}
+        {verdict === 'first' && <div className="note" role="status">🌟 {t('end.first')}</div>}
+        {party && <Fireworks onDone={() => setParty(false)} />}
 
         {card.events.tierUp && (
           <div className="note">

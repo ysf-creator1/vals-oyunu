@@ -55,14 +55,18 @@ export interface Profile {
   themesUnlocked: ThemeId[];
   stats: Stats;
   settings: Settings;
+  /** Settings defaults revision; 2 = timer shown by default (older profiles get it turned on once). */
+  settingsRev?: number;
 }
+
+const SETTINGS_REV = 2;
 
 const zero = (): Record<BandId, number> => Object.fromEntries(BAND_IDS.map((b) => [b, 0])) as Record<BandId, number>;
 
 export const defaultSettings = (): Settings => ({
   sound: true,
   vibration: true,
-  showTimer: false,
+  showTimer: true,
   helper: 'auto',
   fontSize: 'normal',
   highContrast: false,
@@ -85,6 +89,7 @@ export const defaultProfile = (): Profile => ({
   themesUnlocked: ['classic'],
   stats: { solved: zero(), noHint: zero(), totalMs: zero() },
   settings: defaultSettings(),
+  settingsRev: SETTINGS_REV,
 });
 
 /** Fill in missing fields from an older/partial saved profile. */
@@ -102,7 +107,8 @@ export function migrateProfile(raw: unknown): Profile {
       noHint: { ...d.stats.noHint, ...(p.stats?.noHint ?? {}) },
       totalMs: { ...d.stats.totalMs, ...(p.stats?.totalMs ?? {}) },
     },
-    settings: { ...d.settings, ...(p.settings ?? {}) },
+    settings: { ...d.settings, ...(p.settings ?? {}), ...((p.settingsRev ?? 1) < 2 ? { showTimer: true } : {}) },
+    settingsRev: SETTINGS_REV,
   };
 }
 

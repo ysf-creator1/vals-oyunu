@@ -4,6 +4,8 @@
  * GET  /api/rapor       rapor sayfası (veri içermez)
  * GET  /api/rapor/veri  olaylar + yaklaşık konum (JSON); "X-Anahtar" başlığı gerekir
  * GET  /api/durum       sağlık denetimi
+ * GET  /api/sure?s=BÖLÜM&c=CİHAZ   bölüm sonu kıyası: diğer oyuncuların en iyi ve ortalama süresi (sorulan cihaz hariç)
+ * GET  /api/sure?b=BANT&c=CİHAZ    sonsuz mod: o banttaki çözümlerin ortalaması
  *
  * Kayıt: VERI/olaylar/YYYY-MM-DD.jsonl (UTC günü), 400 gün saklanır.
  * Kişisel veri azaltma: tam IP saklanmaz (IPv4 a.b.c.0, IPv6 ilk 3 bölüm); ad ya da hesap yok.
@@ -84,6 +86,61 @@ function temizle(e) {
   return o;
 }
 
+// ---------- süre kıyası ----------
+// Bölüm → cihaz → { ilk: ilk çözüm süresi, en: yardımsız en iyi süre }. Sonsuz modda bölümler tek seferlik:
+// bant → cihaz → { top, n }. Açılışta kayıtlardan kurulur, gelen her "bitti" ile güncellenir.
+const sureler = new Map();
+const bantSure = new Map();
+function sureEkle(o) {
+  if (o.tur !== 'bitti' || !o.cihaz || !o.seviye || o.mod === 'tutorial') return;
+  const ms = typeof o.ms === 'number' ? o.ms : typeof o.sn === 'number' ? o.sn * 1000 : 0;
+  if (!(ms >= 500 && ms <= 3 * 3600e3)) return;
+  if (o.mod === 'endless') {
+    if (!o.bant) return;
+    let m = bantSure.get(o.bant);
+    if (!m) bantSure.set(o.bant, (m = new Map()));
+    const r = m.get(o.cihaz) || { top: 0, n: 0 };
+    r.top += ms; r.n++;
+    m.set(o.cihaz, r);
+    return;
+  }
+  let m = sureler.get(o.seviye);
+  if (!m) sureler.set(o.seviye, (m = new Map()));
+  const r = m.get(o.cihaz) || { ilk: ms, en: Infinity };
+  if (!o.ipucu) r.en = Math.min(r.en, ms);
+  m.set(o.cihaz, r);
+}
+function sureKiyas(q) {
+  const ben = String(q.get('c') || '');
+  const s = q.get('s'), b = q.get('b');
+  if (s) {
+    let n = 0, top = 0, en = Infinity, enN = 0;
+    for (const [c, r] of sureler.get(s) || []) {
+      if (c === ben) continue;
+      n++; top += r.ilk;
+      if (r.en < Infinity) { enN++; en = Math.min(en, r.en); }
+    }
+    return { n, ort: n ? Math.round(top / n) : null, en: enN ? en : null, enN };
+  }
+  if (b) {
+    let n = 0, top = 0, kisi = 0;
+    for (const [c, r] of bantSure.get(b) || []) {
+      if (c === ben) continue;
+      kisi++; n += r.n; top += r.top;
+    }
+    return { n: kisi, ort: n ? Math.round(top / n) : null, en: null, enN: 0 };
+  }
+  return null;
+}
+try {
+  for (const n of fs.readdirSync(DIR).sort()) {
+    if (!/\.jsonl$/.test(n)) continue;
+    for (const line of fs.readFileSync(path.join(DIR, n), 'utf8').split('\n')) {
+      if (line.includes('"bitti"')) { try { sureEkle(JSON.parse(line)); } catch (e) { } }
+    }
+  }
+} catch (e) { log('[sure] okunamadı', e.message); }
+
 // IP başına sınır: 10 dakikada 600 olay
 const hits = new Map();
 setInterval(() => hits.clear(), 10 * 60e3).unref();
@@ -107,6 +164,7 @@ function olayAl(req, res, head) {
       if (!o) continue;
       if (o.tur === 'acilis') Object.assign(o, sys || (sys = sistem(req.headers['user-agent'])));
       buf.push([day, JSON.stringify(Object.assign(o, { z, ip: ipk })) + '\n']);
+      sureEkle(o);
     }
   });
 }
@@ -207,6 +265,11 @@ const server = http.createServer((req, res) => {
     if (req.method === 'OPTIONS') { res.writeHead(204, cors); return res.end(); }
     if (req.method === 'POST') return olayAl(req, res, cors);
     res.writeHead(405, cors); return res.end();
+  }
+  if (p === '/api/sure') {
+    const cors = Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, head, ORIGINS.includes(origin) ? { 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } : {});
+    const d = sureKiyas(new URL(req.url, 'http://x').searchParams);
+    res.writeHead(d ? 200 : 400, cors); return res.end(JSON.stringify(d || { hata: 's ya da b gerekli' }));
   }
   if (p === '/api/durum') { res.writeHead(200, Object.assign({ 'Content-Type': 'text/plain; charset=utf-8' }, head)); return res.end('ok'); }
   if (p === '/api/rapor') {

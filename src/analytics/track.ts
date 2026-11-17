@@ -84,6 +84,11 @@ function context(): Ctx | null {
 
 /** True only the very first time this browser opened the game (device code was just created). */
 export const isFirstVisit = () => context()?.firstVisit ?? false;
+/** Anonymous device code and the server base, or null where events are off (dev, tests, ?debug). */
+export const deviceCode = () => {
+  const c = context();
+  return c && c.device ? { device: c.device, api: c.url.replace(/\/olay$/, '') } : null;
+};
 export const deviceInfo = () => {
   const c = context();
   return c ? { kaynak: c.source, site: c.site } : {};
