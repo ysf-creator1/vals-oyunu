@@ -12,7 +12,8 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      injectRegister: 'auto',
+      // Registered from src/platform/update.ts, which also checks for updates when the app is resumed.
+      injectRegister: false,
       includeAssets: ['icon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'Vals',
@@ -32,6 +33,9 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // A new version takes over right away (the plugin sets these only when it injects the registration itself).
+        skipWaiting: true,
+        clientsClaim: true,
         globPatterns: ['**/*.{js,css,html,svg,png,json,webmanifest}'],
         navigateFallback: 'index.html',
         // The Oracle host serves the usage report and event endpoint under /api: never answer those with the game.

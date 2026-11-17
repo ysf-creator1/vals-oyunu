@@ -4,8 +4,10 @@ import { App } from './ui/App';
 import './ui/theme/app.css';
 import { useGame } from './store/game';
 import { setupInstall } from './platform/device';
+import { setupUpdates } from './platform/update';
 
 setupInstall();
+setupUpdates();
 
 // Test hook for automated browser checks (?debug).
 if (import.meta.env.DEV || location.search.includes('debug')) (window as unknown as { __vals: typeof useGame }).__vals = useGame;
