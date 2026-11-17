@@ -1,5 +1,6 @@
 import type { BandId } from '../engine/types';
-import { BAND_IDS, bandIndex, bandsOfTier, LEVELS_PER_BAND, levelId, PROMOTION, targetMs, tierOf, type Tier } from './bands';
+import { BAND_IDS, bandIndex, bandsOfTier, PROMOTION, targetMs, tierOf, type Tier } from './bands';
+import { levelCount, levelId } from './catalog';
 import type { Profile, RecentEntry } from './profile';
 
 export interface AdaptiveEvents {
@@ -16,12 +17,12 @@ const lastOfTier = (t: Tier) => {
 
 const solvedInBand = (p: Profile, band: BandId) => {
   let n = 0;
-  for (let i = 0; i < LEVELS_PER_BAND; i++) if (p.results[levelId(band, i)]) n++;
+  for (let i = 0; i < levelCount(band); i++) if (p.results[levelId(band, i)]) n++;
   return n;
 };
 
 export const isBandComplete = (p: Profile, band: BandId) => {
-  for (let i = 0; i < LEVELS_PER_BAND; i++) if (!p.results[levelId(band, i)]) return false;
+  for (let i = 0; i < levelCount(band); i++) if (!p.results[levelId(band, i)]) return false;
   return true;
 };
 
@@ -99,7 +100,7 @@ export function setAuto(p: Profile): Profile {
 }
 
 export function firstUnsolved(p: Profile, band: BandId): number | null {
-  for (let i = 0; i < LEVELS_PER_BAND; i++) if (!p.results[levelId(band, i)]) return i;
+  for (let i = 0; i < levelCount(band); i++) if (!p.results[levelId(band, i)]) return i;
   return null;
 }
 
@@ -116,12 +117,12 @@ export function continueTarget(p: Profile): { band: BandId; index: number } {
 
 /** Next level after finishing (band, index) in manual mode: next unsolved in the band, else next band. */
 export function manualNext(p: Profile, band: BandId, index: number): { band: BandId; index: number } {
-  for (let i = index + 1; i < LEVELS_PER_BAND; i++) if (!p.results[levelId(band, i)]) return { band, index: i };
+  for (let i = index + 1; i < levelCount(band); i++) if (!p.results[levelId(band, i)]) return { band, index: i };
   const i = firstUnsolved(p, band);
   if (i !== null) return { band, index: i };
   const bi = bandIndex(band);
   if (bi < BAND_IDS.length - 1) return { band: BAND_IDS[bi + 1], index: firstUnsolved(p, BAND_IDS[bi + 1]) ?? 0 };
-  return { band, index: Math.min(index + 1, LEVELS_PER_BAND - 1) };
+  return { band, index: Math.min(index + 1, levelCount(band) - 1) };
 }
 
 /** Levels in a band open in order; the first is always open. */

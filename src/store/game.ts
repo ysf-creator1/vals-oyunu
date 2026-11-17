@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import levelsJson from '../data/levels.json';
 import { FIRST_RUN_TUTORIAL, tutorialLevel } from '../data/tutorial';
 import { hint as computeHint, type Hint } from '../engine/hint';
 import { initialPath, isSolved, rhythmAfter, tryMove, type MoveResult } from '../engine/rules';
@@ -7,7 +6,8 @@ import type { BandId, Level } from '../engine/types';
 import {
   acceptEasier, applyCampaignResult, continueTarget, manualNext, stayInTier, type AdaptiveEvents,
 } from '../progression/adaptive';
-import { BAND_IDS, levelId, stageOf, targetMs, tierOf, TUTORIAL_BEFORE, type Tier } from '../progression/bands';
+import { BAND_IDS, stageOf, targetMs, tierOf, TUTORIAL_BEFORE, type Tier } from '../progression/bands';
+import { levelById, levelCount, levelId, levelIndex } from '../progression/catalog';
 import { dailyLevel, endlessLevel, titleOf, unlockedThemes, type Title } from '../progression/daily';
 import { defaultProfile, migrateProfile, totalSolved, type Profile, type Settings, type ThemeId } from '../progression/profile';
 import { classify, isFastBadge, starsFor, type Stars } from '../progression/stars';
@@ -19,9 +19,7 @@ import { loadBackup, saveBackup, saveBackupOnExit, type BackupError } from '../b
 import { persistStorage } from '../platform/device';
 import { clearSaved, loadSaved, save } from './persist';
 
-const LEVELS = levelsJson as unknown as Level[];
-const LEVEL_BY_ID = new Map(LEVELS.map((l) => [l.id, l]));
-export const campaignLevel = (band: BandId, index: number) => LEVEL_BY_ID.get(levelId(band, index))!;
+export const campaignLevel = (band: BandId, index: number) => levelById(levelId(band, index))!;
 
 export type Screen = 'home' | 'game' | 'levels' | 'endless' | 'stats' | 'settings' | 'howto';
 type Pos = { band: BandId; index: number };
@@ -142,7 +140,25 @@ const writeBackupAt = (z: string | null) => {
 
 const saved = loadSaved();
 const initialProfile = migrateProfile(saved.profile);
-const savedSession = (saved.session as Session | null) ?? null;
+/**
+ * A saved campaign session stores its level and its position in the band. Positions moved when repeated levels
+ * were dropped: re-derive them from the level id, and drop a session on a level that no longer exists.
+ */
+function fixSavedSession(s: Session | null): Session | null {
+  if (!s) return null;
+  const fixPos = (pos: Pos, id?: string): Pos | null => {
+    const index = id ? levelIndex(pos.band, id) : pos.index;
+    return index >= 0 && index < levelCount(pos.band) ? { band: pos.band, index } : null;
+  };
+  if (s.kind === 'campaign') {
+    if (!s.pos || !levelById(s.level.id)) return null;
+    const pos = fixPos(s.pos, s.level.id);
+    return pos ? { ...s, pos } : null;
+  }
+  if (s.kind === 'tutorial' && s.then && s.then !== 'continue') return { ...s, then: fixPos(s.then) ?? 'continue' };
+  return s;
+}
+const savedSession = fixSavedSession((saved.session as Session | null) ?? null);
 // Daily puzzles now always show their start; drop a saved hidden-start daily from an older version.
 const initialSession = savedSession && savedSession.kind === 'daily' && savedSession.level.start === null ? null : savedSession;
 

@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import levelsJson from '../src/data/levels.json';
 import { TUTORIAL } from '../src/data/tutorial';
-import { canonical, generate } from '../src/engine/generator';
+import { canonical, generate, shapeKey } from '../src/engine/generator';
 import { hint } from '../src/engine/hint';
 import { mulberry32 } from '../src/engine/rng';
 import { applyStone, isDeadEnd, isSolved, legalMoves, nextLen, rhythmAfter, tryMove } from '../src/engine/rules';
 import { metrics, solve, solveStones } from '../src/engine/solver';
 import type { Level, Stone } from '../src/engine/types';
-import { BANDS, bandInfo, LEVELS_PER_BAND } from '../src/progression/bands';
+import { BANDS, bandInfo } from '../src/progression/bands';
+import aliases from '../src/data/level-aliases.json';
 import { dailyLevel } from '../src/progression/daily';
-import { generateCampaign } from '../scripts/generate-levels';
+import { dedupeCampaign, generateCampaign, GENERATED_PER_BAND } from '../scripts/generate-levels';
 
 const levels = levelsJson as unknown as Level[];
 
@@ -94,9 +95,15 @@ describe('tutorial levels', () => {
 });
 
 describe('campaign levels.json', () => {
-  it('has 480 levels with unique ids', () => {
-    expect(levels.length).toBe(BANDS.length * LEVELS_PER_BAND);
-    expect(new Set(levels.map((l) => l.id)).size).toBe(levels.length);
+  it('unique ids; every generated level is either kept or an alias of a kept one', () => {
+    const ids = new Set(levels.map((l) => l.id));
+    expect(ids.size).toBe(levels.length);
+    expect(levels.length + Object.keys(aliases).length).toBe(BANDS.length * GENERATED_PER_BAND);
+    for (const [from, to] of Object.entries(aliases as Record<string, string>)) {
+      expect(ids.has(from), from).toBe(false);
+      expect(ids.has(to), to).toBe(true);
+      expect(from.slice(0, 2)).toBe(to.slice(0, 2));
+    }
   });
   it('every level: single solution equal to the stored one, band filters hold', () => {
     for (const l of levels) {
@@ -115,15 +122,23 @@ describe('campaign levels.json', () => {
       expect(l.w).toBe(6);
     }
   });
-  it('no duplicates under symmetry within a band', () => {
+  it('no repeated puzzle within a band (also not shifted, turned or mirrored)', () => {
     for (const b of BANDS) {
-      const keys = levels.filter((l) => l.band === b.id).map((l) => canonical(6, 6, l.stones));
+      const keys = levels.filter((l) => l.band === b.id).map((l) => shapeKey(l.stones));
       expect(new Set(keys).size).toBe(keys.length);
     }
   });
-  it('generator is deterministic and matches the committed file', () => {
-    const again = generateCampaign();
-    expect(JSON.stringify(again)).toBe(JSON.stringify(levels));
+  it('shapeKey: a shifted and mirrored copy is the same puzzle, canonical tells them apart', () => {
+    const a = levels[0].stones;
+    const minX = Math.min(...a.map((s) => s[0]));
+    const b = a.map(([x, y, k]) => [5 - (x - minX), y, k] as typeof a[number]);
+    expect(shapeKey(b)).toBe(shapeKey(a));
+    expect(canonical(6, 6, a) === canonical(6, 6, b)).toBe(minX === 0);
+  });
+  it('generator is deterministic and matches the committed files', () => {
+    const again = dedupeCampaign(generateCampaign());
+    expect(JSON.stringify(again.levels)).toBe(JSON.stringify(levels));
+    expect(again.aliases).toEqual(aliases);
   });
 });
 

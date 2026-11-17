@@ -52,6 +52,28 @@ export function canonical(W: number, H: number, stones: Stone[]): string {
   return best!;
 }
 
+/**
+ * Key of the puzzle itself: the same under the 8 symmetries AND any shift on the board.
+ * `canonical` keeps absolute positions, so a shape moved by one cell counts as new there;
+ * for players it is the same puzzle.
+ */
+export function shapeKey(stones: Stone[]): string {
+  let best: string | null = null;
+  for (let t = 0; t < 8; t++) {
+    const pts = stones.map(([x0, y0, k]) => {
+      let x = t & 1 ? -x0 : x0;
+      let y = t & 2 ? -y0 : y0;
+      if (t & 4) [x, y] = [y, x];
+      return [x, y, k] as const;
+    });
+    const mx = Math.min(...pts.map((p) => p[0]));
+    const my = Math.min(...pts.map((p) => p[1]));
+    const key = pts.map(([x, y, k]) => `${x - mx},${y - my},${k}`).sort().join(';');
+    if (best === null || key < best) best = key;
+  }
+  return best!;
+}
+
 export class GenerationError extends Error {}
 
 export function generate(

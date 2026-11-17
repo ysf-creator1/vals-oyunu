@@ -2,7 +2,8 @@ import { useState } from 'react';
 import type { BandId } from '../../engine/types';
 import type { StringKey } from '../../i18n';
 import { continueTarget, isUnlocked, selectBandManually, setAuto } from '../../progression/adaptive';
-import { bandsOfTier, LEVELS_PER_BAND, levelId, tierOf, TIERS, type Tier } from '../../progression/bands';
+import { bandsOfTier, tierOf, TIERS, type Tier } from '../../progression/bands';
+import { levelCount, levelId } from '../../progression/catalog';
 import { useGame } from '../../store/game';
 import { ScreenHead } from '../components/ScreenHead';
 import { useT } from '../hooks';
@@ -49,7 +50,7 @@ export function LevelsScreen() {
               {band === profile.currentBand && <span className="badge">●</span>}
             </h3>
             <div className="lv-grid">
-              {Array.from({ length: LEVELS_PER_BAND }, (_, i) => {
+              {Array.from({ length: levelCount(band) }, (_, i) => {
                 const r = profile.results[levelId(band, i)];
                 const unlocked = isUnlocked(profile, band, i);
                 const n = i + 1;

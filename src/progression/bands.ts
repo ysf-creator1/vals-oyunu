@@ -33,7 +33,6 @@ export const BANDS: BandInfo[] = [
 ];
 
 export const BAND_IDS: BandId[] = BANDS.map((x) => x.id);
-export const LEVELS_PER_BAND = 40;
 export const TIERS: Tier[] = ['easy', 'medium', 'hard', 'extra'];
 /**
  * When auto mode moves a fast player up before the band is finished.
@@ -61,8 +60,6 @@ export const bandsOfTier = (t: Tier): BandId[] => BANDS.filter((x) => x.tier ===
 /** 1-based stage of a band inside its tier ("Zor 2" for O4). */
 export const stageOf = (id: BandId): number => bandsOfTier(tierOf(id)).indexOf(id) + 1;
 export const targetMs = (id: BandId): number => bandInfo(id).targetSec * 1000;
-
-export const levelId = (band: BandId, index: number): string => `${band}-${String(index + 1).padStart(3, '0')}`;
 
 /** Tutorial level that must be shown before a band whose mechanic is new. */
 export const TUTORIAL_BEFORE: Partial<Record<BandId, string>> = { K4: 'T5', O2: 'T6', Z1: 'T7' };

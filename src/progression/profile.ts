@@ -1,5 +1,6 @@
 import type { BandId } from '../engine/types';
 import { BAND_IDS } from './bands';
+import { LEVEL_ALIASES } from './catalog';
 import type { SolveClass, Stars } from './stars';
 
 export type ThemeId = 'classic' | 'lily' | 'stars' | 'islands';
@@ -97,6 +98,22 @@ export const defaultProfile = (): Profile => ({
 });
 
 /** Fill in missing fields from an older/partial saved profile. */
+type Results = Profile['results'];
+
+/** Results saved under a dropped repeat level move to the identical level that was kept (best of both). */
+function mergeAliasedResults(results: Results): Results {
+  if (!Object.keys(results).some((id) => id in LEVEL_ALIASES)) return results;
+  const out: Results = {};
+  for (const [id, r] of Object.entries(results)) {
+    const to = LEVEL_ALIASES[id] ?? id;
+    const prev = out[to];
+    out[to] = prev
+      ? { stars: Math.max(prev.stars, r.stars) as Stars, bestMs: Math.min(prev.bestMs, r.bestMs), fast: prev.fast || r.fast }
+      : r;
+  }
+  return out;
+}
+
 export function migrateProfile(raw: unknown): Profile {
   const d = defaultProfile();
   if (!raw || typeof raw !== 'object') return d;
@@ -105,6 +122,7 @@ export function migrateProfile(raw: unknown): Profile {
     ...d,
     ...p,
     version: 1,
+    results: mergeAliasedResults(p.results ?? {}),
     daily: { ...d.daily, ...(p.daily ?? {}) },
     stats: {
       solved: { ...d.stats.solved, ...(p.stats?.solved ?? {}) },

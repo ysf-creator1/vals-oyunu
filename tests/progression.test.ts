@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { acceptEasier, applyCampaignResult, continueTarget, selectBandManually, stayInTier } from '../src/progression/adaptive';
-import { levelId, stageOf, targetMs, tierOf } from '../src/progression/bands';
+import { stageOf, targetMs, tierOf } from '../src/progression/bands';
+import { LEVEL_ALIASES, levelCount, levelId } from '../src/progression/catalog';
 import type { BandId } from '../src/engine/types';
-import { defaultProfile, type Profile, type RecentEntry } from '../src/progression/profile';
+import { defaultProfile, migrateProfile, type Profile, type RecentEntry } from '../src/progression/profile';
 import { classify, starsFor } from '../src/progression/stars';
 import { currentStreak, recordDailySolve, weekKey } from '../src/progression/streak';
 
@@ -76,7 +77,7 @@ describe('auto difficulty', () => {
   });
   it('O4 → Z1 is the step into extra hard; Z keeps speed promotion', () => {
     const p = { ...defaultProfile(), currentBand: 'O4' as BandId };
-    for (let i = 0; i < 40; i++) p.results[levelId('O4', i)] = { stars: 3, bestMs: 1, fast: false };
+    for (let i = 0; i < levelCount('O4'); i++) p.results[levelId('O4', i)] = { stars: 3, bestMs: 1, fast: false };
     expect(play(p, entry('O4', 'normal')).evs[0].tierUp).toEqual({ from: 'hard', to: 'extra' });
     const z = play({ ...defaultProfile(), currentBand: 'Z1' }, entry('Z1', 'fast'), entry('Z1', 'fast'), entry('Z1', 'normal'));
     expect(z.p.currentBand).toBe('Z2');
@@ -111,13 +112,32 @@ describe('auto difficulty', () => {
   });
   it('band completion moves up (natural progression)', () => {
     const p = defaultProfile();
-    for (let i = 0; i < 40; i++) p.results[levelId('K1', i)] = { stars: 3, bestMs: 1, fast: false };
+    for (let i = 0; i < levelCount('K1'); i++) p.results[levelId('K1', i)] = { stars: 3, bestMs: 1, fast: false };
     expect(play(p, entry('K1', 'normal')).p.currentBand).toBe('K2');
   });
   it('continue opens the first unsolved level of the current band', () => {
     const p = defaultProfile();
     p.results[levelId('K1', 0)] = { stars: 3, bestMs: 1, fast: false };
     expect(continueTarget(p)).toEqual({ band: 'K1', index: 1 });
+  });
+});
+
+describe('dropped repeat levels', () => {
+  it('easy bands lost their repeats, later bands keep (almost) all 40', () => {
+    expect(levelCount('K1')).toBeLessThan(25);
+    expect(levelCount('O3')).toBe(40);
+  });
+  it('a result saved under a dropped id moves to the kept twin, keeping the best of both', () => {
+    const [dropped, kept] = Object.entries(LEVEL_ALIASES).find(([, to]) => to.startsWith('K1'))!;
+    const raw = { ...defaultProfile(), results: { [dropped]: { stars: 3, bestMs: 5000, fast: true }, [kept]: { stars: 2, bestMs: 9000, fast: false } } };
+    const p = migrateProfile(JSON.parse(JSON.stringify(raw)));
+    expect(p.results[dropped]).toBeUndefined();
+    expect(p.results[kept]).toEqual({ stars: 3, bestMs: 5000, fast: true });
+  });
+  it('a band counts as complete once its kept levels are solved', () => {
+    const p = defaultProfile();
+    for (let i = 0; i < levelCount('K1'); i++) p.results[levelId('K1', i)] = { stars: 3, bestMs: 1, fast: false };
+    expect(continueTarget(p).band).toBe('K2');
   });
 });
 
