@@ -28,3 +28,14 @@ describe('timer setting', () => {
     expect(migrateProfile({ ...old, settings: { ...old.settings, showTimer: false } }).settings.showTimer).toBe(false);
   });
 });
+
+import { normalizeCode } from '../src/backup/backup';
+describe('backup code', () => {
+  it('accepts any spacing and case, rejects lookalike letters and wrong lengths', () => {
+    expect(normalizeCode(' 7kq2 m9xd-h4pa ')).toBe('7KQ2-M9XD-H4PA');
+    expect(normalizeCode('7KQ2M9XDH4PA')).toBe('7KQ2-M9XD-H4PA');
+    expect(normalizeCode('7KQ2-M9XD-H4P')).toBeNull();
+    expect(normalizeCode('0KQ2-M9XD-H4PA')).toBeNull();
+    expect(normalizeCode('IKQ2-M9XD-H4PA')).toBeNull();
+  });
+});

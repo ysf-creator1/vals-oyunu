@@ -15,6 +15,8 @@ import { dateKey, recordDailySolve } from '../progression/streak';
 import type { StringKey, T } from '../i18n';
 import { deviceInfo, deviceModel, flush as flushEvents, isFirstVisit, track, VERSION } from '../analytics/track';
 import { fetchOthersTimes, type OthersTimes } from '../analytics/times';
+import { loadBackup, saveBackup, saveBackupOnExit, type BackupError } from '../backup/backup';
+import { persistStorage } from '../platform/device';
 import { clearSaved, loadSaved, save } from './persist';
 
 const LEVELS = levelsJson as unknown as Level[];
@@ -70,6 +72,13 @@ interface State {
   session: Session | null;
   screen: Screen;
   endCard: EndCard | null;
+  /** Server backup status: time of the last successful save, and whether the latest save failed. */
+  backupAt: string | null;
+  backupFailed: boolean;
+  createBackup(): Promise<BackupError | null>;
+  fetchBackup(code: string): ReturnType<typeof loadBackup>;
+  applyBackup(code: string, profile: unknown, at: string): void;
+  dismissInstallHint(): void;
   setScreen(s: Screen): void;
   updateProfile(fn: (p: Profile) => Profile): void;
   setSetting<K extends keyof Settings>(k: K, v: Settings[K]): void;
@@ -114,6 +123,23 @@ function newSession(kind: Session['kind'], level: Level, extra: Partial<Session>
   };
 }
 
+const BACKUP_AT_KEY = 'vals:yedek-z';
+const readBackupAt = () => {
+  try {
+    return localStorage.getItem(BACKUP_AT_KEY);
+  } catch {
+    return null;
+  }
+};
+const writeBackupAt = (z: string | null) => {
+  try {
+    if (z) localStorage.setItem(BACKUP_AT_KEY, z);
+    else localStorage.removeItem(BACKUP_AT_KEY);
+  } catch {
+    /* ignore */
+  }
+};
+
 const saved = loadSaved();
 const initialProfile = migrateProfile(saved.profile);
 const savedSession = (saved.session as Session | null) ?? null;
@@ -151,8 +177,38 @@ export const useGame = create<State>((set, get) => {
       track('sifirla', { cozulen: totalSolved(get().profile), bant: get().profile.currentBand });
       const settings = get().profile.settings;
       clearSaved();
-      set({ profile: { ...defaultProfile(), settings }, session: null, endCard: null, screen: 'home' });
+      // The backup code is dropped too: the server copy keeps the old progress and the code can still restore it.
+      writeBackupAt(null);
+      set({ profile: { ...defaultProfile(), settings }, session: null, endCard: null, screen: 'home', backupAt: null, backupFailed: false });
     },
+
+    backupAt: readBackupAt(),
+    backupFailed: false,
+
+    createBackup: async () => {
+      if (get().profile.backup) return null;
+      const r = await saveBackup(get().profile);
+      if (typeof r === 'string') {
+        track('yedek', { ne: 'hata', neden: r });
+        return r;
+      }
+      track('yedek', { ne: 'olustur', cozulen: totalSolved(get().profile) });
+      writeBackupAt(r.at);
+      set({ backupAt: r.at, backupFailed: false });
+      get().updateProfile((p) => ({ ...p, backup: { code: r.code } }));
+      return null;
+    },
+
+    fetchBackup: (code) => loadBackup(code),
+
+    applyBackup: (code, raw, at) => {
+      const profile = { ...migrateProfile(raw), backup: { code } };
+      track('yedek', { ne: 'geri', cozulen: totalSolved(profile), onceki: totalSolved(get().profile) });
+      writeBackupAt(at);
+      set({ profile, session: null, endCard: null, screen: 'home', backupAt: at, backupFailed: false });
+    },
+
+    dismissInstallHint: () => get().updateProfile((p) => ({ ...p, installHintDismissed: true })),
 
     continueGame: () => {
       const { session, profile } = get();
@@ -360,6 +416,55 @@ export const useGame = create<State>((set, get) => {
 
 useGame.subscribe((st) => save({ profile: st.profile, session: st.session }));
 
+// ---- server backup: once a code exists, every profile change is saved a few seconds later ----
+let backupDirty = false;
+let backupTimer: ReturnType<typeof setTimeout> | null = null;
+async function syncBackup() {
+  backupTimer = null;
+  const { profile } = useGame.getState();
+  const code = profile.backup?.code;
+  if (!code) return;
+  backupDirty = false;
+  const r = await saveBackup(profile, code);
+  if (typeof r === 'string') {
+    backupDirty = true;
+    useGame.setState({ backupFailed: true });
+    return;
+  }
+  writeBackupAt(r.at);
+  useGame.setState({ backupAt: r.at, backupFailed: false });
+}
+const scheduleBackup = (ms: number) => {
+  if (backupTimer) clearTimeout(backupTimer);
+  backupTimer = setTimeout(() => void syncBackup(), ms);
+};
+useGame.subscribe((st, prev) => {
+  if (st.profile === prev.profile || !st.profile.backup) return;
+  // A new code was just created together with a fresh save: nothing new to send.
+  if (!prev.profile.backup && st.backupAt) return;
+  backupDirty = true;
+  scheduleBackup(8000);
+});
+if (typeof window !== 'undefined') {
+  const exitSave = () => {
+    const { profile } = useGame.getState();
+    if (!backupDirty || !profile.backup) return;
+    backupDirty = false;
+    if (backupTimer) clearTimeout(backupTimer);
+    backupTimer = null;
+    saveBackupOnExit(profile, profile.backup.code);
+  };
+  window.addEventListener('pagehide', exitSave);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') exitSave();
+  });
+  // Catch up on changes from a session that closed before its save went out.
+  if (useGame.getState().profile.backup) {
+    backupDirty = true;
+    scheduleBackup(5000);
+  }
+}
+
 // ---- usage report: app open, visible play time, levels left when the page closes ----
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   let visibleSince = Date.now();
@@ -384,7 +489,8 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   const p = useGame.getState().profile;
   const ua = navigator.userAgent;
   const yeni = isFirstVisit();
-  void deviceModel().then((model) => track('acilis', {
+  void Promise.all([deviceModel(), persistStorage()]).then(([model, kalici]) => track('acilis', {
+    kalici,
     yeni,
     mobil: /Mobi|Android|iPhone|iPad/i.test(ua) || (navigator.maxTouchPoints > 1 && /Mac/.test(ua)),
     ...deviceInfo(),

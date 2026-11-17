@@ -20,3 +20,11 @@ export function formatTime(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
+
+/** "17 Kasım 10:42" from an ISO time, in the player's language. */
+export function formatDateTime(iso: string, t: T): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const months = t('months').split(',');
+  return `${d.getDate()} ${months[d.getMonth()]} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}

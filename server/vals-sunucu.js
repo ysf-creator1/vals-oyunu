@@ -4,6 +4,8 @@
  * GET  /api/rapor       rapor sayfası (veri içermez)
  * GET  /api/rapor/veri  olaylar + yaklaşık konum (JSON); "X-Anahtar" başlığı gerekir
  * GET  /api/durum       sağlık denetimi
+ * POST /api/yedek       ilerleme yedeği: {profil} yeni kod üretir, {kod, profil} o kodun yedeğini günceller → {kod, z}
+ * POST /api/yedek/al    {kod} → {profil, z}; yanlış kod denemeleri IP başına sınırlı
  * GET  /api/sure?s=BÖLÜM&c=CİHAZ   bölüm sonu kıyası: diğer oyuncuların en iyi ve ortalama süresi (sorulan cihaz hariç)
  * GET  /api/sure?b=BANT&c=CİHAZ    sonsuz mod: o banttaki çözümlerin ortalaması
  *
@@ -28,9 +30,11 @@ const KEY_FILE = path.join(VERI, 'rapor-anahtar.txt');
 const PAGE = path.join(__dirname, 'rapor.html');
 const KEEP_DAYS = 400;
 const ORIGINS = ['https://ysf-creator1.github.io', 'https://vals.130-61-214-155.sslip.io'];
-const TURLER = new Set(['acilis', 'basla', 'bitti', 'birakti', 'yardim', 'ekran', 'ayar', 'sifirla', 'kolay_teklif', 'kademede_kal', 'oturum', 'hata_js']);
+const TURLER = new Set(['acilis', 'basla', 'bitti', 'birakti', 'yardim', 'ekran', 'ayar', 'sifirla', 'kolay_teklif', 'kademede_kal', 'oturum', 'hata_js', 'yedek', 'ana_ekran']);
+const YEDEK = path.join(VERI, 'yedek');
 
 fs.mkdirSync(DIR, { recursive: true });
+fs.mkdirSync(YEDEK, { recursive: true });
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 
 // ---------- kayıt ----------
@@ -50,6 +54,11 @@ setInterval(() => {
     for (const n of fs.readdirSync(DIR)) {
       const m = /^(\d{4}-\d{2}-\d{2})\.jsonl$/.exec(n);
       if (m && Date.now() - Date.parse(m[1]) > KEEP_DAYS * 864e5) fs.unlinkSync(path.join(DIR, n));
+    }
+    // 400 gündür hiç güncellenmeyen yedekler silinir.
+    for (const n of fs.readdirSync(YEDEK)) {
+      const f = path.join(YEDEK, n);
+      if (Date.now() - fs.statSync(f).mtimeMs > KEEP_DAYS * 864e5) fs.unlinkSync(f);
     }
   } catch (e) { }
 }, 6 * 3600e3).unref();
@@ -169,6 +178,57 @@ function olayAl(req, res, head) {
   });
 }
 
+// ---------- ilerleme yedeği ----------
+// Kod hesap yerine geçer: 12 harf/rakam (karışan 0/O, 1/I/L yok), 31^12 ≈ 2^59 olasılık. Dosya adı kodun özeti,
+// kod düz hâliyle hiçbir yerde saklanmaz. Kod dışında kişisel bilgi yok: yalnız oyunun ilerleme kaydı.
+const KOD_HARF = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+const kodTemiz = (k) => { const x = String(k || '').toUpperCase().replace(/[^0-9A-Z]/g, ''); return /^[2-9A-HJKMNP-Z]{12}$/.test(x) ? x : null; };
+const kodBicim = (k) => k.match(/.{4}/g).join('-');
+const kodDosya = (k) => path.join(YEDEK, crypto.createHash('sha256').update('vals-yedek:' + k).digest('hex') + '.json');
+const yedekSay = new Map();
+setInterval(() => yedekSay.clear(), 3600e3).unref();
+function sinir(ip, tur, max) { const k = tur + ip, n = (yedekSay.get(k) || 0) + 1; yedekSay.set(k, n); return n > max; }
+
+function govdeOku(req, max, cb) {
+  let size = 0, body = '', asti = false;
+  req.on('data', (c) => { size += c.length; if (size > max) { asti = true; req.destroy(); return; } body += c; });
+  req.on('end', () => { if (asti) return cb(null); try { cb(JSON.parse(body)); } catch (e) { cb(null); } });
+}
+function yedekYaz(req, res, head, ip) {
+  const json = (code, o) => { res.writeHead(code, Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, head)); res.end(JSON.stringify(o)); };
+  govdeOku(req, 300000, (b) => {
+    if (!b || typeof b.profil !== 'object' || !b.profil || Array.isArray(b.profil)) return json(400, { hata: 'profil gerekli' });
+    let kod = null;
+    if (b.kod) {
+      if ((yedekSay.get('yanlis' + ip) || 0) >= 30) return json(429, { hata: 'çok fazla deneme' });
+      kod = kodTemiz(b.kod);
+      if (!kod || !fs.existsSync(kodDosya(kod))) { sinir(ip, 'yanlis', 1); return json(404, { hata: 'kod yok' }); }
+      if (sinir(ip, 'yaz', 2000)) return json(429, { hata: 'çok sık' });
+    } else {
+      if (sinir(ip, 'yeni', 20)) return json(429, { hata: 'çok sık' });
+      do { kod = Array.from({ length: 12 }, () => KOD_HARF[crypto.randomInt(KOD_HARF.length)]).join(''); } while (fs.existsSync(kodDosya(kod)));
+    }
+    const z = new Date().toISOString();
+    const f = kodDosya(kod), tmp = f + '.' + process.pid + '.tmp';
+    try {
+      fs.writeFileSync(tmp, JSON.stringify({ z, profil: b.profil }), { mode: 0o600 });
+      fs.renameSync(tmp, f);
+    } catch (e) { log('[yedek] yazma hatası', e.message); return json(500, { hata: 'yazılamadı' }); }
+    json(200, { kod: kodBicim(kod), z });
+  });
+}
+function yedekAl(req, res, head, ip) {
+  const json = (code, o) => { res.writeHead(code, Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, head)); res.end(JSON.stringify(o)); };
+  govdeOku(req, 2000, (b) => {
+    if ((yedekSay.get('yanlis' + ip) || 0) >= 30) return json(429, { hata: 'çok fazla deneme, bir saat sonra tekrar dene' });
+    const kod = b && kodTemiz(b.kod);
+    let d = null;
+    try { if (kod) d = JSON.parse(fs.readFileSync(kodDosya(kod), 'utf8')); } catch (e) { }
+    if (!d) { sinir(ip, 'yanlis', 30); return void setTimeout(() => json(404, { hata: 'kod yok' }), 400); }
+    json(200, { kod: kodBicim(kod), z: d.z, profil: d.profil });
+  });
+}
+
 // ---------- rapor ----------
 function anahtar() {
   try { const k = fs.readFileSync(KEY_FILE, 'utf8').trim(); if (k.length >= 16) return k; } catch (e) { }
@@ -270,6 +330,13 @@ const server = http.createServer((req, res) => {
     const cors = Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, head, ORIGINS.includes(origin) ? { 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } : {});
     const d = sureKiyas(new URL(req.url, 'http://x').searchParams);
     res.writeHead(d ? 200 : 400, cors); return res.end(JSON.stringify(d || { hata: 's ya da b gerekli' }));
+  }
+  if (p === '/api/yedek' || p === '/api/yedek/al') {
+    const cors = Object.assign({}, head, ORIGINS.includes(origin) ? { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'Content-Type', 'Vary': 'Origin' } : {});
+    if (req.method === 'OPTIONS') { res.writeHead(204, cors); return res.end(); }
+    if (req.method !== 'POST') { res.writeHead(405, cors); return res.end(); }
+    const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+    return p === '/api/yedek' ? yedekYaz(req, res, cors, ip) : yedekAl(req, res, cors, ip);
   }
   if (p === '/api/durum') { res.writeHead(200, Object.assign({ 'Content-Type': 'text/plain; charset=utf-8' }, head)); return res.end('ok'); }
   if (p === '/api/rapor') {

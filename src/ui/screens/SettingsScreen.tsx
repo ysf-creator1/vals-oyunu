@@ -3,6 +3,7 @@ import type { StringKey } from '../../i18n';
 import { THEME_ORDER } from '../../progression/daily';
 import type { Settings, ThemeId } from '../../progression/profile';
 import { useGame } from '../../store/game';
+import { KeepProgressSection } from '../components/KeepProgress';
 import { ScreenHead } from '../components/ScreenHead';
 import { useT } from '../hooks';
 
@@ -82,6 +83,7 @@ export function SettingsScreen() {
             })}
           </div>
         </div>
+        <KeepProgressSection />
         <div style={{ marginTop: 24 }}>
           <button
             className="btn"

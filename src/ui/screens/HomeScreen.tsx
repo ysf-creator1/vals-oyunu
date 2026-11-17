@@ -6,6 +6,7 @@ import { currentStreak, dateKey } from '../../progression/streak';
 import { useState } from 'react';
 import { useGame } from '../../store/game';
 import { GuideSheet, InfoButton } from '../components/Guide';
+import { InstallCard } from '../components/KeepProgress';
 import { useT } from '../hooks';
 
 function Logo() {
@@ -58,6 +59,7 @@ export function HomeScreen() {
           </span>
           {streak > 0 && <span className="badge">🔥 {t('home.streak', { n: streak })}</span>}
         </button>
+        <InstallCard />
       </div>
 
       <div className="home-grid">

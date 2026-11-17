@@ -55,6 +55,10 @@ export interface Profile {
   themesUnlocked: ThemeId[];
   stats: Stats;
   settings: Settings;
+  /** Recovery code of the server backup; once set, the backup follows every change. */
+  backup?: { code: string };
+  /** The "add to home screen" card was closed. */
+  installHintDismissed?: boolean;
   /** Settings defaults revision; 2 = timer shown by default (older profiles get it turned on once). */
   settingsRev?: number;
 }
