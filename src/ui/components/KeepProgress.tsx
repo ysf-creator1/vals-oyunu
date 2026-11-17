@@ -73,7 +73,7 @@ export function KeepProgressSection() {
   const { standalone } = useInstallState();
   const g = useGame.getState;
   const [busy, setBusy] = useState(false);
-  const [restoreOpen, setRestoreOpen] = useState(false);
+  const [restoreOpen, setRestoreOpen] = useState(!useGame.getState().profile.backup);
   const [input, setInput] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
   const code = profile.backup?.code;
