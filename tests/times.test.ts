@@ -52,3 +52,24 @@ describe('backup code', () => {
     expect(normalizeCode('IKQ2-M9XD-H4PA')).toBeNull();
   });
 });
+
+import { printsFor } from '../src/ui/board/Footprints';
+describe('themes', () => {
+  it('opens lily and the footprint themes to everyone, keeps earned ones', () => {
+    expect(migrateProfile(undefined).themesUnlocked).toEqual(expect.arrayContaining(['classic', 'lily', 'beach', 'snow', 'paws']));
+    const old = migrateProfile({ themesUnlocked: ['classic', 'stars'] });
+    expect(old.themesUnlocked).toEqual(expect.arrayContaining(['lily', 'beach', 'snow', 'paws', 'stars']));
+    expect(old.themesUnlocked).not.toContain('islands');
+  });
+  it('leaves one print per cell crossed, right foot first, then alternating', () => {
+    const level = { id: 'x', band: 'K1' as const, w: 4, h: 4, stones: [[0, 0, 'P'], [3, 0, 'P'], [3, 2, 'P']] as never, start: 0, solution: [0, 1, 2], nodes: 0, decisions: 0 };
+    const ps = printsFor(level, [0, 1, 2], 0.1);
+    expect(ps.length).toBe(5);
+    expect(ps.map((p) => p.right)).toEqual([true, false, true, false, true]);
+    // walking east (+x): the right foot is on the south side (+y)
+    expect(ps[0].y).toBeGreaterThan(0.5);
+    expect(ps[1].y).toBeLessThan(0.5);
+    // only the newest jump animates
+    expect(ps.map((p) => p.fresh)).toEqual([undefined, undefined, undefined, 0, 1]);
+  });
+});

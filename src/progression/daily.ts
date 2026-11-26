@@ -3,7 +3,7 @@ import { mulberry32, randomSeed } from '../engine/rng';
 import type { BandConfig, BandId, Level } from '../engine/types';
 import { bandInfo, ENDLESS_BANDS, type Tier } from './bands';
 import type { Profile, ThemeId } from './profile';
-import { totalSolved } from './profile';
+import { FREE_THEMES, totalSolved } from './profile';
 import { dateKey } from './streak';
 
 /**
@@ -53,12 +53,11 @@ export function titleOf(p: Profile): Title {
   return 'apprentice';
 }
 
-export const THEME_ORDER: ThemeId[] = ['classic', 'lily', 'stars', 'islands'];
+export const THEME_ORDER: ThemeId[] = ['classic', 'lily', 'beach', 'snow', 'paws', 'stars', 'islands'];
 
 export function unlockedThemes(p: Profile): ThemeId[] {
   const n = totalSolved(p);
-  const out: ThemeId[] = ['classic'];
-  if (n >= 25) out.push('lily');
+  const out: ThemeId[] = [...FREE_THEMES];
   if (n >= 100) out.push('stars');
   if (p.daily.best >= 7) out.push('islands');
   return out;

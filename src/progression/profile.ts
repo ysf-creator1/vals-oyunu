@@ -3,8 +3,10 @@ import { BAND_IDS } from './bands';
 import { LEVEL_ALIASES } from './catalog';
 import type { SolveClass, Stars } from './stars';
 
-export type ThemeId = 'classic' | 'lily' | 'stars' | 'islands';
+export type ThemeId = 'classic' | 'lily' | 'beach' | 'snow' | 'paws' | 'stars' | 'islands';
 export type Lang = 'tr' | 'en';
+/** Themes open to everyone from the start (stars and islands are still earned). */
+export const FREE_THEMES: ThemeId[] = ['classic', 'lily', 'beach', 'snow', 'paws'];
 
 export interface Settings {
   sound: boolean;
@@ -96,7 +98,7 @@ export const defaultProfile = (): Profile => ({
   tutorialSeen: [],
   extraIntroSeen: false,
   daily: { lastSolved: null, streak: 0, best: 0, freezeUsedWeek: null },
-  themesUnlocked: ['classic'],
+  themesUnlocked: [...FREE_THEMES],
   stats: { solved: zero(), noHint: zero(), totalMs: zero() },
   settings: defaultSettings(),
   settingsRev: SETTINGS_REV,
@@ -128,6 +130,7 @@ export function migrateProfile(raw: unknown): Profile {
     ...p,
     version: 1,
     results: mergeAliasedResults(p.results ?? {}),
+    themesUnlocked: [...new Set([...FREE_THEMES, ...(p.themesUnlocked ?? [])])],
     daily: { ...d.daily, ...(p.daily ?? {}) },
     stats: {
       solved: { ...d.stats.solved, ...(p.stats?.solved ?? {}) },

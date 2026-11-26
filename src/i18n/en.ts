@@ -167,6 +167,9 @@ export const en: Record<StringKey, string> = {
 
   'theme.classic': 'Classic',
   'theme.lily': 'Lily pond',
+  'theme.beach': 'Beach',
+  'theme.snow': 'Snow',
+  'theme.paws': 'Paws',
   'theme.stars': 'Constellation',
   'theme.islands': 'Islands',
   'theme.cond.lily': 'Solve 25 levels',

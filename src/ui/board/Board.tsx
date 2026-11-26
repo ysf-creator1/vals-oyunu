@@ -2,6 +2,7 @@ import { memo } from 'react';
 import type { Level } from '../../engine/types';
 import type { T } from '../../i18n';
 import type { ThemeId } from '../../progression/profile';
+import { Beanie, Cat, Footprints, isFootprintTheme, Shell, Snowfall, SnowGround, SnowStoneShadows } from './Footprints';
 
 export interface BoardProps {
   level: Level;
@@ -182,7 +183,8 @@ function BoardImpl(p: BoardProps) {
     );
   }
 
-  const arcs = path.slice(1).map((s, k) => {
+  const steps = isFootprintTheme(theme);
+  const arcs = steps ? null : path.slice(1).map((s, k) => {
     const a = level.stones[path[k]];
     const b = level.stones[s];
     const isNew = k === path.length - 2;
@@ -214,6 +216,7 @@ function BoardImpl(p: BoardProps) {
       aria-label={`${W}×${H}`}
     >
       <rect x={-PAD} y={-PAD} width={W + 2 * PAD} height={H + 2 * PAD} rx={0.28} fill="var(--b-bg)" />
+      {theme === 'snow' && <SnowGround W={W} H={H} pad={PAD} />}
       {theme === 'stars' &&
         [[0.4, 0.7], [2.2, 0.3], [4.6, 1.2], [5.3, 4.4], [1.1, 5.4], [3.3, 3.6], [0.6, 2.9]].map(([sx, sy], i) =>
           sx < W && sy < H ? <circle key={i} cx={sx} cy={sy} r={0.025} fill="#fff" opacity={0.5} /> : null,
@@ -225,7 +228,10 @@ function BoardImpl(p: BoardProps) {
           x2={c(level.stones[p.miss.to][0])} y2={c(level.stones[p.miss.to][1])}
           stroke="var(--b-wrong)" strokeWidth={0.06} strokeDasharray="0.14 0.12" strokeLinecap="round" style={{ pointerEvents: 'none' }} />
       )}
-      <g>{arcs}</g>
+      {steps ? <Footprints level={level} path={path} theme={theme} /> : <g>{arcs}</g>}
+      {theme === 'snow' && <SnowStoneShadows level={level} />}
+      {/* under the stones, so a passing flake never covers a jump number */}
+      {theme === 'snow' && <Snowfall W={W} H={H} />}
       {level.stones.map(([x, y, kind], i) => {
         const vi = visitedAt.get(i);
         const visited = vi !== undefined;
@@ -292,8 +298,12 @@ function BoardImpl(p: BoardProps) {
           <circle className="breathe" r={0.45} fill="none" stroke="var(--b-accent)" strokeWidth={0.075} />
           {theme === 'lily' && <Frog />}
           {theme === 'islands' && <Boat />}
+          {theme === 'beach' && <Shell />}
+          {theme === 'snow' && <Beanie />}
+          {theme === 'paws' && <Cat />}
         </g>
       )}
+
       {p.finger != null && level.stones[p.finger] && (
         <g key={`f${p.finger}`} className="finger" transform={`translate(${c(level.stones[p.finger][0])} ${c(level.stones[p.finger][1])})`} style={{ pointerEvents: 'none' }}>
           <circle className="tap-ring" r={0.34} fill="none" stroke="var(--b-accent)" strokeWidth={0.06} />

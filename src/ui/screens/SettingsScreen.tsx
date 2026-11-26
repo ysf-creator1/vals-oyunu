@@ -10,6 +10,9 @@ import { useT } from '../hooks';
 const SWATCH: Record<ThemeId, string[]> = {
   classic: ['#fbfaf7', '#1d1b26', '#5b3cc4'],
   lily: ['#cfe9df', '#8fcc78', '#c2185b'],
+  beach: ['#ead6ae', '#2b8a8a', '#e2563f'],
+  snow: ['#edf2f8', '#2f4a6b', '#d64545'],
+  paws: ['#dce6cb', '#4a5a32', '#e07b39'],
   stars: ['#0e1430', '#e6ebff', '#ffd166'],
   islands: ['#2d7db3', '#f1dca2', '#ff6b35'],
 };

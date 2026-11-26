@@ -166,6 +166,9 @@ export const tr = {
 
   'theme.classic': 'Klasik',
   'theme.lily': 'Nilüfer',
+  'theme.beach': 'Kumsal',
+  'theme.snow': 'Kar',
+  'theme.paws': 'Patiler',
   'theme.stars': 'Takımyıldız',
   'theme.islands': 'Adalar',
   'theme.cond.lily': '25 bölüm çöz',
