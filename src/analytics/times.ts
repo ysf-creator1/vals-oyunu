@@ -46,3 +46,24 @@ export function compareSolve(ms: number, helped: boolean, o: OthersTimes | null)
   if (helped || o.best === null || ms >= o.best) return null;
   return o.bestN >= FASTEST_MIN_PLAYERS ? 'fastest' : 'leading';
 }
+
+/**
+ * Whether this device last switched "Show timer" on by hand (from its own anonymous "ayar" events):
+ * true / false, null when it never touched the switch. Throws when the server can't answer (ask again later).
+ */
+export async function fetchTimerChoice(timeoutMs = 4000): Promise<boolean | null> {
+  const d = deviceCode();
+  if (!d) return null;
+  if (typeof fetch !== 'function') throw new Error('no fetch');
+  const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = setTimeout(() => ctl?.abort(), timeoutMs);
+  try {
+    const r = await fetch(`${d.api}/sure-ayar?${new URLSearchParams({ c: d.device })}`, { signal: ctl?.signal, cache: 'no-store' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = (await r.json()) as { acik?: boolean | null };
+    if (!('acik' in j)) throw new Error('bad answer');
+    return j.acik === true ? true : j.acik === false ? false : null;
+  } finally {
+    clearTimeout(timer);
+  }
+}

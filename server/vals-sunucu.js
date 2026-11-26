@@ -8,6 +8,7 @@
  * POST /api/yedek/al    {kod} → {profil, z}; yanlış kod denemeleri IP başına sınırlı
  * GET  /api/sure?s=BÖLÜM&c=CİHAZ   bölüm sonu kıyası: diğer oyuncuların en iyi ve ortalama süresi (sorulan cihaz hariç)
  * GET  /api/sure?b=BANT&c=CİHAZ    sonsuz mod: o banttaki çözümlerin ortalaması
+ * GET  /api/sure-ayar?c=CİHAZ      bu cihaz "Süreyi göster"i en son elle açtı mı → {acik: true|false|null}
  *
  * Kayıt: VERI/olaylar/YYYY-MM-DD.jsonl (UTC günü), 400 gün saklanır.
  * Kişisel veri azaltma: tam IP saklanmaz (IPv4 a.b.c.0, IPv6 ilk 3 bölüm); ad ya da hesap yok.
@@ -119,6 +120,12 @@ function sureEkle(o) {
   if (!o.ipucu) r.en = Math.min(r.en, ms);
   m.set(o.cihaz, r);
 }
+// Cihaz → "Süreyi göster" anahtarının elle verilen son değeri (ayar olaylarından). Süre varsayılanı kapanınca
+// daha önce kendisi açmış oyuncuların açık kalması için oyun bir kez sorar.
+const sureAyar = new Map();
+function ayarEkle(o) {
+  if (o.tur === 'ayar' && o.ayar === 'showTimer' && o.cihaz) sureAyar.set(o.cihaz, o.deger === 'true');
+}
 function sureKiyas(q) {
   const ben = String(q.get('c') || '');
   const s = q.get('s'), b = q.get('b');
@@ -146,6 +153,7 @@ try {
     if (!/\.jsonl$/.test(n)) continue;
     for (const line of fs.readFileSync(path.join(DIR, n), 'utf8').split('\n')) {
       if (line.includes('"bitti"')) { try { sureEkle(JSON.parse(line)); } catch (e) { } }
+      else if (line.includes('"showTimer"')) { try { ayarEkle(JSON.parse(line)); } catch (e) { } }
     }
   }
 } catch (e) { log('[sure] okunamadı', e.message); }
@@ -174,6 +182,7 @@ function olayAl(req, res, head) {
       if (o.tur === 'acilis') Object.assign(o, sys || (sys = sistem(req.headers['user-agent'])));
       buf.push([day, JSON.stringify(Object.assign(o, { z, ip: ipk })) + '\n']);
       sureEkle(o);
+      ayarEkle(o);
     }
   });
 }
@@ -330,6 +339,11 @@ const server = http.createServer((req, res) => {
     const cors = Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, head, ORIGINS.includes(origin) ? { 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } : {});
     const d = sureKiyas(new URL(req.url, 'http://x').searchParams);
     res.writeHead(d ? 200 : 400, cors); return res.end(JSON.stringify(d || { hata: 's ya da b gerekli' }));
+  }
+  if (p === '/api/sure-ayar') {
+    const cors = Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, head, ORIGINS.includes(origin) ? { 'Access-Control-Allow-Origin': origin, 'Vary': 'Origin' } : {});
+    const c = new URL(req.url, 'http://x').searchParams.get('c') || '';
+    res.writeHead(200, cors); return res.end(JSON.stringify({ acik: sureAyar.has(c) ? sureAyar.get(c) : null }));
   }
   if (p === '/api/yedek' || p === '/api/yedek/al') {
     const cors = Object.assign({}, head, ORIGINS.includes(origin) ? { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'Content-Type', 'Vary': 'Origin' } : {});

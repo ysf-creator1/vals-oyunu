@@ -60,18 +60,23 @@ export interface Profile {
   backup?: { code: string };
   /** The "add to home screen" card was closed. */
   installHintDismissed?: boolean;
-  /** Settings defaults revision; 2 = timer shown by default (older profiles get it turned on once). */
+  /**
+   * Settings defaults revision. 1: timer off by default. 2: timer on by default (everyone got it turned on).
+   * 3: timer off by default again; players who had switched it on themselves keep it.
+   */
   settingsRev?: number;
+  /** Rev 2 → 3: the timer was turned off; ask the event server once whether this device had switched it on itself. */
+  timerAsk?: boolean;
 }
 
-const SETTINGS_REV = 2;
+const SETTINGS_REV = 3;
 
 const zero = (): Record<BandId, number> => Object.fromEntries(BAND_IDS.map((b) => [b, 0])) as Record<BandId, number>;
 
 export const defaultSettings = (): Settings => ({
   sound: true,
   vibration: true,
-  showTimer: true,
+  showTimer: false,
   helper: 'auto',
   fontSize: 'normal',
   highContrast: false,
@@ -129,9 +134,20 @@ export function migrateProfile(raw: unknown): Profile {
       noHint: { ...d.stats.noHint, ...(p.stats?.noHint ?? {}) },
       totalMs: { ...d.stats.totalMs, ...(p.stats?.totalMs ?? {}) },
     },
-    settings: { ...d.settings, ...(p.settings ?? {}), ...((p.settingsRev ?? 1) < 2 ? { showTimer: true } : {}) },
+    ...timerMigration(p),
     settingsRev: SETTINGS_REV,
   };
+}
+
+/**
+ * Rev 1 profiles still hold the player's own choice (the default was off then), so it is kept. Rev 2 turned the
+ * timer on for everyone, so a stored "on" says nothing: it goes off and the game asks the server once (timerAsk).
+ */
+function timerMigration(p: Partial<Profile>): Pick<Profile, 'settings' | 'timerAsk'> {
+  const settings = { ...defaultSettings(), ...(p.settings ?? {}) };
+  const rev = p.settingsRev ?? 1;
+  if (rev === 2) return { settings: { ...settings, showTimer: false }, timerAsk: true };
+  return { settings, timerAsk: rev < 2 ? false : p.timerAsk };
 }
 
 export const totalSolved = (p: Profile) => Object.values(p.stats.solved).reduce((a, b) => a + b, 0);

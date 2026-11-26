@@ -21,11 +21,24 @@ describe('end-of-level comparison', () => {
 });
 
 describe('timer setting', () => {
-  it('is on for new players and turned on once for older profiles, then left to the player', () => {
-    expect(migrateProfile(undefined).settings.showTimer).toBe(true);
-    const old = migrateProfile({ settings: { showTimer: false } });
-    expect(old.settings.showTimer).toBe(true);
-    expect(migrateProfile({ ...old, settings: { ...old.settings, showTimer: false } }).settings.showTimer).toBe(false);
+  it('is off for new players; only players who switched it on themselves keep it', () => {
+    // new players: timer off
+    expect(migrateProfile(undefined).settings.showTimer).toBe(false);
+    expect(migrateProfile(undefined).timerAsk).toBeFalsy();
+    // rev 1 (timer was off by default then): the stored value is the player's own choice
+    expect(migrateProfile({ settings: { showTimer: true } }).settings.showTimer).toBe(true);
+    expect(migrateProfile({ settings: { showTimer: false } }).settings.showTimer).toBe(false);
+    expect(migrateProfile({ settings: { showTimer: true } }).timerAsk).toBe(false);
+    // rev 2 (on for everyone): off, and ask the server once
+    const rev2 = migrateProfile({ settingsRev: 2, settings: { showTimer: true } });
+    expect(rev2.settings.showTimer).toBe(false);
+    expect(rev2.timerAsk).toBe(true);
+    expect(rev2.settingsRev).toBe(3);
+    // rev 3: kept as is; a pending question survives a reload
+    expect(migrateProfile(rev2).timerAsk).toBe(true);
+    const on = { ...rev2, timerAsk: false, settings: { ...rev2.settings, showTimer: true } };
+    expect(migrateProfile(on).settings.showTimer).toBe(true);
+    expect(migrateProfile(on).timerAsk).toBe(false);
   });
 });
 

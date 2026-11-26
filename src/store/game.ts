@@ -14,7 +14,7 @@ import { classify, isFastBadge, starsFor, type Stars } from '../progression/star
 import { dateKey, recordDailySolve } from '../progression/streak';
 import type { StringKey, T } from '../i18n';
 import { deviceInfo, deviceModel, flush as flushEvents, isFirstVisit, track, VERSION } from '../analytics/track';
-import { fetchOthersTimes, type OthersTimes } from '../analytics/times';
+import { fetchOthersTimes, fetchTimerChoice, type OthersTimes } from '../analytics/times';
 import { loadBackup, saveBackup, saveBackupOnExit, type BackupError } from '../backup/backup';
 import { persistStorage } from '../platform/device';
 import { clearSaved, loadSaved, save } from './persist';
@@ -187,7 +187,9 @@ export const useGame = create<State>((set, get) => {
     updateProfile: (fn) => set({ profile: fn(get().profile) }),
     setSetting: (k, v) => {
       track('ayar', { ayar: k, deger: String(v) });
-      set({ profile: { ...get().profile, settings: { ...get().profile.settings, [k]: v } } });
+      const p = get().profile;
+      // Touching the timer switch settles the pending "did you turn it on yourself?" question.
+      set({ profile: { ...p, settings: { ...p.settings, [k]: v }, ...(k === 'showTimer' ? { timerAsk: false } : {}) } });
     },
     resetProgress: () => {
       track('sifirla', { cozulen: totalSolved(get().profile), bant: get().profile.currentBand });
@@ -222,6 +224,7 @@ export const useGame = create<State>((set, get) => {
       track('yedek', { ne: 'geri', cozulen: totalSolved(profile), onceki: totalSolved(get().profile) });
       writeBackupAt(at);
       set({ profile, session: null, endCard: null, screen: 'home', backupAt: at, backupFailed: false });
+      askTimerChoice();
     },
 
     dismissInstallHint: () => get().updateProfile((p) => ({ ...p, installHintDismissed: true })),
@@ -522,6 +525,23 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
     surum: VERSION,
     devam: !!initialSession && !initialSession.solved,
   }));
+  askTimerChoice();
+}
+
+/**
+ * Timer back to off by default (settings rev 3): a profile from the "on for everyone" days asks the event server
+ * once whether this device had switched the timer on by hand, and keeps it on if so. No answer → ask next time.
+ */
+function askTimerChoice() {
+  if (!useGame.getState().profile.timerAsk) return;
+  fetchTimerChoice().then(
+    (on) => {
+      const p = useGame.getState().profile;
+      if (!p.timerAsk) return; // the player touched the switch meanwhile
+      useGame.setState({ profile: { ...p, timerAsk: false, settings: { ...p.settings, showTimer: on === true } } });
+    },
+    () => {},
+  );
 }
 
 /** Label like "Zor 2 · 5" for the top bar: tier, stage inside the tier, level number inside the stage. */
